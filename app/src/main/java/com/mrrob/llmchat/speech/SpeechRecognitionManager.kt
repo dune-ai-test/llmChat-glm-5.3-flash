@@ -104,8 +104,9 @@ class SpeechRecognitionManager(private val context: Context) : RecognitionListen
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
+        // Partial results arrive under the same key as final results.
         val text = partialResults
-            ?.getStringArrayList(SpeechRecognizer.PARTIAL_RESULTS)
+            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             ?.firstOrNull()
             .orEmpty()
         if (text.isNotBlank()) onPartial(text)
