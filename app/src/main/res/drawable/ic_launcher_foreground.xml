@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Chat bubble -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,32 H66 A14,14 0 0 1 80,46 V58 A14,14 0 0 1 66,72 H47 L40,82 V72 H42 A14,14 0 0 1 28,58 V46 A14,14 0 0 1 42,32 Z" />
+
+    <!-- Sound waves -->
+    <path
+        android:fillColor="#007AFF"
+        android:pathData="M44,52 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
+    <path
+        android:strokeColor="#007AFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M51,46 a7,7 0 0 1 0,12" />
+    <path
+        android:strokeColor="#007AFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M55,42 a12,12 0 0 1 0,20" />
+    <path
+        android:strokeColor="#007AFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M59,38 a16,16 0 0 1 0,28" />
+</vector>
