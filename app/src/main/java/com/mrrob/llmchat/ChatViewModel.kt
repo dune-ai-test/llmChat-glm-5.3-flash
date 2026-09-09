@@ -308,7 +308,8 @@ class ChatViewModel(
             try {
                 val result = client.complete(repo.resolveApi(connection), model, wire, conv.systemPrompt)
                 _streaming.value = null
-                _generating.value = false                val merged = mergedVariants(message) + result.text
+                _generating.value = false
+                val merged = mergedVariants(message) + result.text
                 repo.updateMessage(
                     message.copy(
                         text = result.text,
