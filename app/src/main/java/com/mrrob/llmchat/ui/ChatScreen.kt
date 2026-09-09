@@ -69,6 +69,7 @@ import com.mrrob.llmchat.data.ApiErrorKind
 import com.mrrob.llmchat.data.ConnectionEntity
 import com.mrrob.llmchat.data.Markdown
 import com.mrrob.llmchat.data.MessageEntity
+import kotlinx.coroutines.launch
 import com.mrrob.llmchat.ui.kit.AsterButton
 import com.mrrob.llmchat.ui.kit.ButtonVariant
 import com.mrrob.llmchat.ui.kit.IconsL
