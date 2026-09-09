@@ -23,16 +23,22 @@ class ConnectivityMonitor(context: Context) {
                 trySend(isOnline())
             }
         }
-        val request = android.net.NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        manager.registerNetworkCallback(request, callback)
-        awaitClose { manager.unregisterNetworkCallback(callback) }
+        var registered = false
+        try {
+            val request = android.net.NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            manager.registerNetworkCallback(request, callback)
+            registered = true
+        } catch (_: Exception) {
+            trySend(isOnline())
+        }
+        awaitClose { if (registered) runCatching { manager.unregisterNetworkCallback(callback) } }
     }.distinctUntilChanged()
 
-    fun isOnline(): Boolean {
+    fun isOnline(): Boolean = runCatching {
         val network = manager.activeNetwork ?: return false
         val caps = manager.getNetworkCapabilities(network) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(true)
 }

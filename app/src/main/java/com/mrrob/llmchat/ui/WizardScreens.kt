@@ -297,7 +297,7 @@ fun WizardConfig(
             WizardField(
                 label = "API Key",
                 value = w.apiKey,
-                placeholder = "sk-…",
+                placeholder = "API key (optional)",
                 keyboard = KeyboardType.Password,
                 visual = if (revealKey) VisualTransformation.None else PasswordVisualTransformation(),
                 trailing = {
@@ -451,14 +451,14 @@ fun WizardConfig(
             AsterButton(
                 text = "Test Connection",
                 modifier = Modifier.weight(1f),
-                enabled = w.baseUrl.isNotBlank() && w.apiKey.isNotBlank(),
+                enabled = w.baseUrl.isNotBlank(),
                 onClick = onTest
             )
             AsterButton(
                 text = "Continue",
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    if (w.baseUrl.isNotBlank() && w.apiKey.isNotBlank() &&
+                    if (w.baseUrl.isNotBlank() &&
                         (w.activeModel.isNotBlank() || w.selectedModels.isNotEmpty())
                     ) onContinue()
                 }

@@ -46,10 +46,18 @@ built to the HTML designs in [`ui/`](ui/) and the
 
 ## Building the APK (GitHub Actions only)
 
-The workflow builds debug + release APKs on every push and publishes them as
-the `LLM-Chat-APKs` artifact; pushing a tag like `v1.0.0` also attaches them
-to a GitHub Release. No local Android SDK needed.
+The workflow builds a **debug APK** on every push and publishes it as the
+`LLM-Chat-debug-apk` artifact. No local Android SDK needed.
 
 ```
 .github/workflows/build-apk.yml
 ```
+
+## Configuration notes
+
+- **API key is optional** — many local / self-hosted OpenAI-compatible servers
+  (LM Studio, Ollama, etc.) accept unauthenticated requests, so the wizard
+  proceeds without a key when the endpoint doesn't need one.
+- If the app ever crashes, the next launch shows a crash dialog with the
+  captured stack trace and a Clear button (Settings ▸ Advanced keeps a
+  redacted request log too).

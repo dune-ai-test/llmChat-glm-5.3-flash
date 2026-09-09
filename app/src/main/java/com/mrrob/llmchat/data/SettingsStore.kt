@@ -157,15 +157,16 @@ class SettingsStore(context: Context) {
 
     // ── API keys (encrypted, never in AppSettings or exports) ──────────────────
 
-    fun apiKey(connectionId: String): String =
+    fun apiKey(connectionId: String): String = runCatching {
         secrets?.getString("key_$connectionId", "").orEmpty()
+    }.getOrDefault("")
 
     fun setApiKey(connectionId: String, key: String) {
-        secrets?.edit()?.putString("key_$connectionId", key)?.apply()
+        runCatching { secrets?.edit()?.putString("key_$connectionId", key)?.apply() }
     }
 
     fun removeApiKey(connectionId: String) {
-        secrets?.edit()?.remove("key_$connectionId")?.apply()
+        runCatching { secrets?.edit()?.remove("key_$connectionId")?.apply() }
     }
 
     fun clearAll() {

@@ -27,6 +27,22 @@ class AsterApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        installCrashCapture()
         container = AppContainer(this)
+    }
+
+    /** Records the last uncaught exception so a crash can be diagnosed after restart. */
+    private fun installCrashCapture() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try {
+                java.io.File(filesDir, "crash.txt").writeText(
+                    "Time: ${java.util.Date()}\n" +
+                        android.util.Log.getStackTraceString(error)
+                )
+            } catch (_: Throwable) {
+            }
+            previous?.uncaughtException(thread, error)
+        }
     }
 }

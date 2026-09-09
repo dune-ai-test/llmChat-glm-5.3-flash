@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,6 +70,41 @@ private fun AsterNavigation(vm: AppViewModel) {
     val nav: NavHostController = rememberNavController()
     val navigate by vm.navigate.collectAsStateWithLifecycle()
     val openChat by vm.openConversationId.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    var crashDismissed by androidx.compose.runtime.saveable.rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+
+    val crash = vm.lastCrash
+    if (crash != null && !crashDismissed) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { crashDismissed = true },
+            containerColor = c.card,
+            icon = { Icon(IconsL.warning, null, tint = c.danger) },
+            title = { Text("The app crashed on the previous run", color = c.textPrimary) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                ) {
+                    Text(crash, style = LocalType.current.mono, color = c.textSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.clearCrashLog()
+                        crashDismissed = true
+                    }
+                ) { Text("Clear", color = c.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { crashDismissed = true }) { Text("Dismiss", color = c.accent) }
+            }
+        )
+    }
 
     LaunchedEffect(navigate) {
         navigate?.let {

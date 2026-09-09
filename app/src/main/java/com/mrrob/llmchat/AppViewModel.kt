@@ -41,6 +41,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val client = container.client
     val appContext: android.content.Context = app.applicationContext
 
+    /** Stack trace captured during the previous run, if the app crashed. */
+    val lastCrash: String? = runCatching {
+        java.io.File(appContext.filesDir, "crash.txt")
+            .takeIf { it.exists() }?.readText()
+    }.getOrNull()
+
+    fun clearCrashLog() {
+        runCatching { java.io.File(appContext.filesDir, "crash.txt").delete() }
+    }
+
     val settings: StateFlow<AppSettings> = settingsStore.settings
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = settingsStore.update(transform)
