@@ -116,7 +116,7 @@ fun HomeScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
-                        greeting(),
+                        "Aster",
                         style = t.pageTitle,
                         color = c.textPrimary
                     )

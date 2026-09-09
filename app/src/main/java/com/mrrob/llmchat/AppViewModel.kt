@@ -303,7 +303,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             apiKey = w.apiKey,
             setAsDefault = w.setAsDefault
         )
-        repo.setConnectionStatus(saved.id, if (w.testError == null) "CONNECTED" else "OFFLINE")
+        val fullyTested = w.steps.isNotEmpty() && w.steps.values.all { it == TestStepState.DONE }
+        repo.setConnectionStatus(
+            saved.id,
+            when {
+                fullyTested && w.testError == null -> "CONNECTED"
+                w.testError != null -> "OFFLINE"
+                else -> "UNKNOWN" // saved without a connection test
+            }
+        )
         settingsStore.update { it.copy(onboardingDone = true) }
         _wizard.update { it.copy(saved = true, editingConnectionId = saved.id) }
     }

@@ -55,6 +55,7 @@ import com.mrrob.llmchat.ui.kit.IconsL
 import com.mrrob.llmchat.ui.theme.AsterTheme
 import com.mrrob.llmchat.ui.theme.LocalScheme
 import com.mrrob.llmchat.ui.theme.LocalType
+import kotlinx.coroutines.launch
 
 @Composable
 fun AsterRoot(app: AsterApp) {
@@ -218,10 +219,18 @@ private fun AsterNavigation(vm: AppViewModel) {
             )
         }
         composable("wizard/config") {
+            val configScope = androidx.compose.runtime.rememberCoroutineScope()
             WizardConfig(
                 app = vm,
                 onTest = { nav.navigate("wizard/test") },
-                onContinue = { nav.navigate("wizard/test") },
+                onContinue = {
+                    configScope.launch {
+                        vm.wizardSaveAndFinish()
+                        nav.navigate("main") {
+                            popUpTo("main") { inclusive = true }
+                        }
+                    }
+                },
                 onBack = { nav.popBackStack() }
             )
         }
