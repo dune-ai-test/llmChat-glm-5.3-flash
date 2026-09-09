@@ -1,0 +1,1055 @@
+package com.mrrob.llmchat.ui
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mrrob.llmchat.AppViewModel
+import com.mrrob.llmchat.data.AppSettings
+import com.mrrob.llmchat.ui.kit.AsterBackHeader
+import com.mrrob.llmchat.ui.kit.AsterCard
+import com.mrrob.llmchat.ui.kit.AsterRow
+import com.mrrob.llmchat.ui.kit.AsterSegmented
+import com.mrrob.llmchat.ui.kit.AsterSliderRow
+import com.mrrob.llmchat.ui.kit.AsterSwitch
+import com.mrrob.llmchat.ui.kit.CardDivider
+import com.mrrob.llmchat.ui.kit.IconsL
+import com.mrrob.llmchat.ui.kit.InfoStrip
+import com.mrrob.llmchat.ui.kit.SectionLabel
+import com.mrrob.llmchat.ui.theme.LocalScheme
+import com.mrrob.llmchat.ui.theme.LocalType
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+/** 27 — Settings main screen. */
+@Composable
+fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val connections by app.connections.collectAsStateWithLifecycle()
+    val debugLog = app.container.debugLog
+    val logEntries by debugLog.entries.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    val t = LocalType.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var privacyDialog by remember { mutableStateOf(false) }
+    var profileDialog by remember { mutableStateOf(false) }
+    var resetConfirm by remember { mutableStateOf(false) }
+    var deleteConfirm by remember { mutableStateOf(false) }
+    var importMessage by remember { mutableStateOf<String?>(null) }
+    var showLog by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = app.exportAllData()
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val raw = context.contentResolver.openInputStream(uri)?.use {
+                        it.readBytes().decodeToString()
+                    }.orEmpty()
+                    importMessage = when (val r = app.importData(raw)) {
+                        is com.mrrob.llmchat.data.AppRepository.ImportResult.Success ->
+                            "Imported ${r.count} conversation${if (r.count == 1) "" else "s"}."
+                        is com.mrrob.llmchat.data.AppRepository.ImportResult.Failure ->
+                            r.reason
+                    }
+                } catch (_: Exception) {
+                    importMessage = "That file couldn't be read."
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+    ) {
+        Text("Settings", style = t.largeTitle, color = c.textPrimary)
+        Spacer(Modifier.height(14.dp))
+
+        AsterCard(
+            onClick = { profileDialog = true },
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(all = 16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(c.accent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        settings.displayName.take(1).uppercase(),
+                        style = t.cardTitle.copy(fontSize = 19.sp, fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+                Spacer(Modifier.width(13.dp))
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(settings.displayName.ifBlank { "Your workspace" }, style = t.cardTitle, color = c.textPrimary)
+                    Text(
+                        "Local workspace · ${connections.size} connection${if (connections.size == 1) "" else "s"}",
+                        style = t.desc.copy(fontSize = 12.5.sp),
+                        color = c.textSecondary
+                    )
+                }
+                Icon(IconsL.chevronRight, null, tint = c.textMuted, modifier = Modifier.size(17.dp))
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+
+        SectionLabel("Chat")
+        AsterCard(contentPadding = PaddingValuesZero) {
+            AsterRow(label = "Streaming", icon = IconsL.chatSquare, value = if (settings.streaming) "On" else "Off", showChevron = true, onClick = { onNavigate("settings/chat") })
+            CardDivider()
+            AsterRow(
+                label = "System prompt",
+                icon = IconsL.code,
+                value = if (settings.promptPreset != "custom") settings.promptPreset.replaceFirstChar { it.uppercase() }
+                else settings.systemPrompt.split(" ").take(2).joinToString(" "),
+                showChevron = true,
+                onClick = { onNavigate("settings/chat") }
+            )
+            CardDivider()
+            AsterRow(label = "Temperature", icon = IconsL.thermometer, value = formatTemp(settings.temperature), showChevron = true, onClick = { onNavigate("settings/chat") })
+        }
+        Spacer(Modifier.height(14.dp))
+
+        SectionLabel("Voice")
+        AsterCard(contentPadding = PaddingValuesZero) {
+            AsterRow(
+                label = "Speech-to-text",
+                icon = IconsL.audioLines,
+                value = "On-device",
+                showChevron = true,
+                onClick = { onNavigate("settings/voice") }
+            )
+            CardDivider()
+            AsterRow(
+                label = "Text-to-speech",
+                icon = IconsL.volume,
+                trailing = { AsterSwitch(checked = settings.voiceTts) { app.updateSettings { s -> s.copy(voiceTts = it) } } }
+            )
+            CardDivider()
+            AsterRow(label = "Voice", icon = IconsL.mic, value = settings.voiceName, showChevron = true, onClick = { onNavigate("settings/voice") })
+            CardDivider()
+            AsterRow(
+                label = "Auto-play responses",
+                icon = IconsL.play,
+                trailing = { AsterSwitch(checked = settings.voiceAutoPlay) { app.updateSettings { s -> s.copy(voiceAutoPlay = it) } } }
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+
+        SectionLabel("Appearance")
+        AsterCard(contentPadding = PaddingValuesZero) {
+            AsterRow(
+                label = "Theme",
+                icon = IconsL.sun,
+                value = settings.themeMode.replaceFirstChar { it.uppercase() },
+                showChevron = true,
+                onClick = { onNavigate("settings/appearance") }
+            )
+            CardDivider()
+            AsterRow(label = "Font size", icon = IconsL.type, value = settings.fontScale.replaceFirstChar { it.uppercase() }, showChevron = true, onClick = { onNavigate("settings/appearance") })
+            CardDivider()
+            AsterRow(label = "Chat density", icon = IconsL.list, value = settings.chatDensity.replaceFirstChar { it.uppercase() }, showChevron = true, onClick = { onNavigate("settings/appearance") })
+        }
+        Spacer(Modifier.height(14.dp))
+
+        SectionLabel("Advanced")
+        AsterCard(contentPadding = PaddingValuesZero) {
+            AsterRow(
+                label = "Custom headers",
+                icon = IconsL.braces,
+                value = defaultHeaderCount(app).toString(),
+                showChevron = true,
+                onClick = { onNavigate("settings/advanced") }
+            )
+            CardDivider()
+            AsterRow(label = "Request timeout", icon = IconsL.timer, value = "${settings.requestTimeoutSec}s", showChevron = true, onClick = { onNavigate("settings/advanced") })
+            CardDivider()
+            AsterRow(label = "Custom endpoint", icon = IconsL.globe, value = settings.endpointPath, showChevron = true, onClick = { onNavigate("settings/advanced") })
+            CardDivider()
+            AsterRow(
+                label = "Debug logging",
+                icon = IconsL.bug,
+                trailing = {
+                    AsterSwitch(checked = settings.debugLogging) { enabled ->
+                        debugLog.enabled = enabled
+                        app.updateSettings { s -> s.copy(debugLogging = enabled) }
+                    }
+                }
+            )
+            if (settings.debugLogging && logEntries.isNotEmpty()) {
+                CardDivider()
+                AsterRow(label = "View request log", value = "${logEntries.size}", showChevron = true, onClick = { showLog = true })
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+
+        SectionLabel("Data")
+        AsterCard(contentPadding = PaddingValuesZero) {
+            AsterRow(label = "Export data", icon = IconsL.download, onClick = { exportLauncher.launch("aster-backup.json") })
+            CardDivider()
+            AsterRow(label = "Import data", icon = IconsL.arrowSwap, onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) })
+            CardDivider()
+            AsterRow(label = "Reset settings", onClick = { resetConfirm = true })
+            CardDivider()
+            AsterRow(label = "Delete all data", destructive = true, onClick = { deleteConfirm = true })
+        }
+        Spacer(Modifier.height(14.dp))
+
+        SectionLabel("About")
+        AsterCard(contentPadding = PaddingValuesZero) {
+            AsterRow(label = "Version", icon = IconsL.info, value = "1.2.0", showChevron = true, onClick = { privacyDialog = true })
+            CardDivider()
+            AsterRow(label = "Privacy", icon = IconsL.block, showChevron = true, onClick = { privacyDialog = true })
+        }
+        Spacer(Modifier.height(28.dp))
+    }
+
+    if (privacyDialog) {
+        AlertDialog(
+            onDismissRequest = { privacyDialog = false },
+            containerColor = c.card,
+            title = { Text("Privacy", style = t.cardTitle, color = c.textPrimary) },
+            text = {
+                Text(
+                    "Your conversations are sent to the API provider you configure. " +
+                        "Aster has no backend of its own — chats, settings and keys stay on this device. " +
+                        "API keys are stored encrypted and are never included in exports or shared text.",
+                    style = t.desc,
+                    color = c.textSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { privacyDialog = false }) { Text("Done", color = c.accent) }
+            }
+        )
+    }
+
+    if (resetConfirm) {
+        AlertDialog(
+            onDismissRequest = { resetConfirm = false },
+            containerColor = c.card,
+            title = { Text("Reset app settings?", style = t.cardTitle, color = c.textPrimary) },
+            text = { Text("Preferences return to defaults. Conversations are kept.", style = t.desc, color = c.textSecondary) },
+            confirmButton = { TextButton(onClick = { app.resetSettings(); resetConfirm = false }) { Text("Reset", color = c.accent) } },
+            dismissButton = { TextButton(onClick = { resetConfirm = false }) { Text("Cancel", color = c.textSecondary) } }
+        )
+    }
+
+    if (deleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { deleteConfirm = false },
+            containerColor = c.card,
+            title = { Text("Delete all data?", style = t.cardTitle, color = c.textPrimary) },
+            text = { Text("This removes every conversation, connection and key. This cannot be undone.", style = t.desc, color = c.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    app.clearAllData()
+                    deleteConfirm = false
+                    app.selectTab(com.mrrob.llmchat.AsterTab.HOME)
+                }) { Text("Delete everything", color = c.danger, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("Cancel", color = c.textSecondary) } }
+        )
+    }
+
+    importMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { importMessage = null },
+            containerColor = c.card,
+            title = { Text("Import", style = t.cardTitle, color = c.textPrimary) },
+            text = { Text(msg, style = t.desc, color = c.textSecondary) },
+            confirmButton = { TextButton(onClick = { importMessage = null }) { Text("OK", color = c.accent) } }
+        )
+    }
+
+    if (showLog) {
+        EditTextDialog(
+            title = "Request log",
+            value = debugLog.copyText().ifBlank { "No requests logged yet." },
+            multiline = true,
+            monospace = true,
+            onDismiss = { showLog = false },
+            onSave = { debugLog.clear() }
+        )
+    }
+
+    if (profileDialog) {
+        EditTextDialog(
+            title = "Display name",
+            value = settings.displayName,
+            multiline = false,
+            onDismiss = { profileDialog = false },
+            onSave = { v ->
+                app.updateSettings { s -> s.copy(displayName = v.ifBlank { "Your workspace" }) }
+                profileDialog = false
+            }
+        )
+    }
+}
+
+private val PaddingValuesZero = androidx.compose.foundation.layout.PaddingValues()
+
+private fun defaultHeaderCount(app: AppViewModel): Int {
+    val conn = app.connections.value.firstOrNull { it.isDefault } ?: return 0
+    return app.repo.customHeadersOf(conn).size
+}
+
+private fun formatTemp(v: Float): String =
+    if (v == v.toInt().toFloat()) "${v.toInt()}.0" else v.toString().take(3)
+
+// ── 28 Chat settings ──────────────────────────────────────────────────────────
+
+@Composable
+fun ChatSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    val t = LocalType.current
+    var promptDialog by remember { mutableStateOf(false) }
+    var maxTokensDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+    ) {
+        AsterBackHeader(title = "Chat", onBack = onBack)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionLabel("Generation")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(
+                    label = "Streaming",
+                    trailing = { AsterSwitch(checked = settings.streaming) { app.updateSettings { s -> s.copy(streaming = it) } } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "System prompt",
+                    value = settings.promptPreset.replaceFirstChar { it.uppercase() },
+                    showChevron = true,
+                    onClick = { promptDialog = true }
+                )
+            }
+            SectionLabel("Parameters")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterSliderRow(
+                    label = "Temperature",
+                    value = settings.temperature,
+                    range = 0f..2f,
+                    valueText = formatTemp(settings.temperature),
+                    onValueChange = { v -> app.updateSettings { it.copy(temperature = (v * 10).toInt() / 10f) } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Maximum tokens",
+                    value = "${settings.maxTokens}",
+                    showChevron = true,
+                    onClick = { maxTokensDialog = true }
+                )
+                CardDivider()
+                AsterRow(label = "Context length", value = "Provider-determined", showChevron = false)
+            }
+
+            // Preset chips + custom prompt (28)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("concise", "detailed", "code-first", "custom").forEach { preset ->
+                    com.mrrob.llmchat.ui.kit.AsterChip(
+                        text = preset.replaceFirstChar { it.uppercase() },
+                        selected = settings.promptPreset == preset,
+                        onClick = {
+                            app.updateSettings { s ->
+                                s.copy(
+                                    promptPreset = preset,
+                                    systemPrompt = when (preset) {
+                                        "concise" -> AppSettings.PRESET_CONCISE
+                                        "detailed" -> AppSettings.PRESET_DETAILED
+                                        "code-first" -> AppSettings.PRESET_CODE_FIRST
+                                        else -> s.systemPrompt
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+
+            AsterCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+                Text(
+                    "CUSTOM INSTRUCTIONS",
+                    style = t.tiny.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
+                    color = c.textMuted
+                )
+                Spacer(Modifier.height(8.dp))
+                BasicTextField(
+                    value = settings.systemPrompt,
+                    onValueChange = { v -> app.updateSettings { it.copy(systemPrompt = v, promptPreset = "custom") } },
+                    textStyle = t.body.copy(color = c.textPrimary),
+                    cursorBrush = SolidColor(c.accent),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (promptDialog) {
+        EditTextDialog(
+            title = "Default system prompt",
+            value = settings.systemPrompt,
+            multiline = true,
+            onDismiss = { promptDialog = false },
+            onSave = {
+                app.updateSettings { it.copy(systemPrompt = it, promptPreset = "custom") }
+                promptDialog = false
+            }
+        )
+    }
+    if (maxTokensDialog) {
+        NumberDialog(
+            title = "Maximum tokens",
+            value = settings.maxTokens.toString(),
+            onDismiss = { maxTokensDialog = false },
+            onSave = { v ->
+                v.toIntOrNull()?.coerceIn(1, 200000)?.let { app.updateSettings { s -> s.copy(maxTokens = it) } }
+                maxTokensDialog = false
+            }
+        )
+    }
+}
+
+// ── 29 Voice settings ─────────────────────────────────────────────────────────
+
+@Composable
+fun VoiceSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val c = LocalScheme.current
+    val t = LocalType.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .verticalScroll(rememberScrollState())
+    ) {
+        AsterBackHeader(title = "Voice", onBack = onBack)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionLabel("Speech")
+            AsterCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 13.dp)) {
+                AsterRow(label = "Speech-to-text")
+                AsterSegmented(
+                    options = listOf("On-device", "Cloud"),
+                    selectedIndex = 0,
+                    onSelect = { idx ->
+                        // Cloud STT is not implemented on-device; selection is cosmetic.
+                        if (idx == 0) Unit
+                    }
+                )
+            }
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(
+                    label = "Text-to-speech",
+                    trailing = { AsterSwitch(checked = settings.voiceTts) { app.updateSettings { s -> s.copy(voiceTts = it) } } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Interrupt on speech",
+                    trailing = { AsterSwitch(checked = settings.interruptOnSpeech) { app.updateSettings { s -> s.copy(interruptOnSpeech = it) } } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Continuous conversation",
+                    trailing = { AsterSwitch(checked = settings.continuousVoice) { app.updateSettings { s -> s.copy(continuousVoice = it) } } }
+                )
+            }
+            SectionLabel("Voice")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(
+                    label = settings.voiceName.split(" · ").firstOrNull().orEmpty().ifBlank { "Aria" },
+                    description = settings.voiceName,
+                    onClick = {
+                        val names = listOf("Aria · Warm", "Fenrir · Calm", "Clyde · Neutral")
+                        val idx = names.indexOf(settings.voiceName)
+                        app.updateSettings { s -> s.copy(voiceName = names[(idx + 1) % names.size]) }
+                    },
+                    trailing = {
+                        Box(
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(c.fill)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    com.mrrob.llmchat.speech.TtsPlayer(context).speak(
+                                        "Hello, I'm ${settings.voiceName.split(" · ").firstOrNull() ?: "Aria"}. This is how I'll sound."
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(IconsL.play, "Preview voice", tint = c.textSecondary, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                )
+            }
+            SectionLabel("Tuning")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterSliderRow(
+                    label = "Speaking rate",
+                    value = settings.speakingRate,
+                    range = 0.5f..2f,
+                    valueText = "${(settings.speakingRate * 10).toInt() / 10f}x",
+                    onValueChange = { v -> app.updateSettings { it.copy(speakingRate = (v * 10).toInt() / 10f) } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Auto-play responses",
+                    trailing = { AsterSwitch(checked = settings.voiceAutoPlay) { app.updateSettings { s -> s.copy(voiceAutoPlay = it) } } }
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+// ── 30 Appearance ─────────────────────────────────────────────────────────────
+
+@Composable
+fun AppearanceScreen(app: AppViewModel, onBack: () -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    val t = LocalType.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .verticalScroll(rememberScrollState())
+    ) {
+        AsterBackHeader(title = "Appearance", onBack = onBack)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text("Theme", style = t.cardTitle, color = c.textPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                listOf("light", "dark", "system").forEach { mode ->
+                    ThemeCard(
+                        mode = mode,
+                        selected = settings.themeMode == mode,
+                        modifier = Modifier.weight(1f),
+                        onClick = { app.updateSettings { it.copy(themeMode = mode) } }
+                    )
+                }
+            }
+            SectionLabel("Text")
+            AsterCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 13.dp)) {
+                AsterRow(label = "Font size")
+                AsterSegmented(
+                    options = listOf("Small", "Medium", "Large"),
+                    selectedIndex = listOf("small", "medium", "large").indexOf(settings.fontScale).coerceAtLeast(0),
+                    optionStyle = { i -> t.desc.copy(fontSize = when (i) { 0 -> 12.sp; 1 -> 14.sp; else -> 16.sp }) },
+                    onSelect = { idx ->
+                        app.updateSettings { it.copy(fontScale = listOf("small", "medium", "large")[idx]) }
+                    }
+                )
+            }
+            AsterCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 13.dp)) {
+                AsterRow(label = "Chat density")
+                AsterSegmented(
+                    options = listOf("Comfortable", "Compact"),
+                    selectedIndex = if (settings.chatDensity == "compact") 1 else 0,
+                    onSelect = { idx ->
+                        app.updateSettings { it.copy(chatDensity = if (idx == 1) "compact" else "comfortable") }
+                    }
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ThemeCard(mode: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (selected) c.accentTint else c.card)
+            .border(
+                if (selected) 1.5.dp else 1.dp,
+                if (selected) c.accent else c.border,
+                RoundedCornerShape(18.dp)
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        val previewDark = mode == "dark" || (mode == "system" && c.dark)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(if (previewDark) Color(0xFF1A1A1E) else Color(0xFFF2F2EF))
+                .border(1.dp, c.border, RoundedCornerShape(11.dp))
+                .padding(9.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.width(34.dp).height(7.dp).clip(RoundedCornerShape(4.dp)).background(if (previewDark) Color(0xFF3A3A42) else Color(0xFFD8D8D2)))
+                Box(Modifier.width(44.dp).height(7.dp).clip(RoundedCornerShape(4.dp)).background(c.accent))
+                Box(Modifier.width(26.dp).height(7.dp).clip(RoundedCornerShape(4.dp)).background(if (previewDark) Color(0xFF3A3A42) else Color(0xFFD8D8D2)))
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(mode.replaceFirstChar { it.uppercase() }, style = t.desc.copy(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold), color = c.textPrimary, modifier = Modifier.weight(1f))
+            Box(
+                Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .border(if (selected) 1.5.dp else 1.5.dp, if (selected) c.accent else c.border, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) Box(Modifier.size(9.dp).clip(CircleShape).background(c.accent))
+            }
+        }
+    }
+}
+
+// ── 31 Advanced API ───────────────────────────────────────────────────────────
+
+@Composable
+fun AdvancedApiScreen(app: AppViewModel, onBack: () -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val connections by app.connections.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    val t = LocalType.current
+    val scope = rememberCoroutineScope()
+    val defaultConn = remember(connections) { connections.firstOrNull { it.isDefault } }
+
+    var headers by remember(defaultConn) {
+        mutableStateOf(
+            defaultConn?.let { conn ->
+                app.repo.customHeadersOf(conn).entries.map { it.key to it.value }
+            } ?: emptyList()
+        )
+    }
+    var headerDialog by remember { mutableStateOf(false) }
+    var timeoutDialog by remember { mutableStateOf(false) }
+    var endpointDialog by remember { mutableStateOf(false) }
+    var rawDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+    ) {
+        AsterBackHeader(title = "Advanced", onBack = onBack)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionLabel("Custom headers")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                headers.forEachIndexed { idx, (key, value) ->
+                    if (idx > 0) CardDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(key, style = t.rowTitle.copy(fontFamily = com.mrrob.llmchat.ui.theme.MonoFamily), modifier = Modifier.weight(1f))
+                        Text(
+                            if (key.equals("Authorization", true)) "Bearer ••••••" else value,
+                            style = t.desc.copy(fontFamily = com.mrrob.llmchat.ui.theme.MonoFamily),
+                            color = c.textSecondary,
+                            maxLines = 1
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Icon(
+                            IconsL.trash, "Remove", tint = c.textMuted,
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    headers = headers.filterIndexed { i, _ -> i != idx }
+                                    persistHeaders(app, defaultConn?.id, headers)
+                                }
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            enabled = defaultConn != null
+                        ) { headerDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(IconsL.plus, null, tint = c.accent, modifier = Modifier.size(14.dp))
+                    Text("Add header", style = t.desc.copy(fontWeight = FontWeight.SemiBold), color = c.accent)
+                }
+            }
+
+            SectionLabel("Request")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(label = "Request timeout", value = "${settings.requestTimeoutSec}s", onClick = { timeoutDialog = true })
+                CardDivider()
+                AsterRow(label = "Endpoint path", value = settings.endpointPath, onClick = { endpointDialog = true })
+                CardDivider()
+                AsterRow(
+                    label = "API version",
+                    value = settings.apiVersion.ifBlank { "default" },
+                    onClick = { /* editing via raw params endpoint */ }
+                )
+            }
+
+            SectionLabel("Raw parameters")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(c.codeBg)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { rawDialog = true }
+                    )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("additional_params.json", style = t.monoSmall, color = c.textMuted, modifier = Modifier.weight(1f))
+                    Icon(IconsL.copy, "Copy", tint = c.textMuted, modifier = Modifier.size(14.dp))
+                }
+                Column(modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
+                    (settings.rawParams.ifBlank { "{}" }.lines().ifEmpty { listOf("{}") }).forEach { line ->
+                        val color = when {
+                            line.contains("\"") && line.contains(":") -> c.success
+                            line.trim() == "{" || line.trim() == "}" -> c.codeFg
+                            else -> c.codeFg
+                        }
+                        Text(line.ifBlank { " " }, style = t.mono, color = color)
+                    }
+                }
+            }
+
+            SectionLabel("Diagnostics")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                val debugLog = app.container.debugLog
+                AsterRow(
+                    label = "Debug logging",
+                    description = "Store request/response bodies locally for troubleshooting.",
+                    trailing = {
+                        AsterSwitch(checked = settings.debugLogging) { on ->
+                            debugLog.enabled = on
+                            app.updateSettings { s -> s.copy(debugLogging = on) }
+                        }
+                    }
+                )
+            }
+
+            InfoStrip(
+                text = "Incorrect raw parameters may cause request failures.",
+                icon = IconsL.warning,
+                background = c.warningTint,
+                tint = c.warning
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (headerDialog) {
+        AddHeaderDialog(onDismiss = { headerDialog = false }) { key, value ->
+            headers = headers + (key to value)
+            persistHeaders(app, defaultConn?.id, headers)
+            headerDialog = false
+        }
+    }
+    if (timeoutDialog) {
+        NumberDialog(
+            title = "Request timeout (seconds)",
+            value = settings.requestTimeoutSec.toString(),
+            onDismiss = { timeoutDialog = false },
+            onSave = { v ->
+                v.toIntOrNull()?.coerceIn(5, 600)?.let { app.updateSettings { s -> s.copy(requestTimeoutSec = it) } }
+                timeoutDialog = false
+            }
+        )
+    }
+    if (endpointDialog) {
+        EditTextDialog(
+            title = "Endpoint path",
+            value = settings.endpointPath,
+            multiline = false,
+            onDismiss = { endpointDialog = false },
+            onSave = {
+                app.updateSettings { s -> s.copy(endpointPath = it.ifBlank { "/chat/completions" }) }
+                endpointDialog = false
+            }
+        )
+    }
+    if (rawDialog) {
+        EditTextDialog(
+            title = "additional_params.json",
+            value = settings.rawParams.ifBlank { "{\n  \n}" },
+            multiline = true,
+            monospace = true,
+            onDismiss = { rawDialog = false },
+            onSave = {
+                app.updateSettings { s -> s.copy(rawParams = validateJsonOrEmpty(it)) }
+                rawDialog = false
+            }
+        )
+    }
+    scope
+}
+
+private fun validateJsonOrEmpty(text: String): String =
+    try {
+        if (text.isBlank()) "" else { JSONObject(text); text.trim() }
+    } catch (_: Exception) {
+        ""
+    }
+
+private fun persistHeaders(app: AppViewModel, connectionId: String?, headers: List<Pair<String, String>>) {
+    val obj = JSONObject()
+    headers.forEach { (k, v) -> obj.put(k, v) }
+    if (connectionId != null) app.repo.setHeaders(connectionId, obj.toString())
+}
+
+@Composable
+private fun AddHeaderDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    var key by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.card,
+        title = { Text("Add header", style = t.cardTitle, color = c.textPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SmallField("Name", key) { key = it }
+                SmallField("Value", value) { value = it }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (key.isNotBlank()) onAdd(key.trim(), value.trim()) }) {
+                Text("Add", color = c.accent, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.textSecondary) } }
+    )
+}
+
+@Composable
+private fun SmallField(placeholder: String, value: String, onValueChange: (String) -> Unit) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(c.bg)
+            .border(1.dp, c.border, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp)
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = t.rowTitle.copy(color = c.textPrimary),
+            cursorBrush = SolidColor(c.accent),
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.CenterStart),
+            decorationBox = { inner ->
+                Box {
+                    if (value.isEmpty()) Text(placeholder, style = t.rowTitle, color = c.textMuted)
+                    inner()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+internal fun EditTextDialog(
+    title: String,
+    value: String,
+    multiline: Boolean,
+    monospace: Boolean = false,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    var text by remember { mutableStateOf(value) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.card,
+        title = { Text(title, style = t.cardTitle, color = c.textPrimary) },
+        text = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 80.dp, max = 300.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(c.bg)
+                    .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                    .padding(14.dp)
+            ) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = !multiline,
+                    textStyle = (if (monospace) t.mono.copy(fontSize = 13.sp, lineHeight = 18.sp) else t.body).copy(color = c.textPrimary),
+                    cursorBrush = SolidColor(c.accent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) { Text("Save", color = c.accent, fontWeight = FontWeight.SemiBold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.textSecondary) } }
+    )
+}
+
+@Composable
+internal fun NumberDialog(
+    title: String,
+    value: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    var text by remember { mutableStateOf(value) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.card,
+        title = { Text(title, style = t.cardTitle, color = c.textPrimary) },
+        text = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(c.bg)
+                    .border(1.dp, c.border, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp)
+            ) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    textStyle = t.rowTitle.copy(color = c.textPrimary),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    cursorBrush = SolidColor(c.accent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterStart)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) { Text("Apply", color = c.accent, fontWeight = FontWeight.SemiBold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.textSecondary) } }
+    )
+}

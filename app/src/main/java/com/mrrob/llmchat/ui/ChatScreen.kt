@@ -1,166 +1,755 @@
 package com.mrrob.llmchat.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.mrrob.llmchat.MainViewModel
-import com.mrrob.llmchat.data.ChatMessage
-import com.mrrob.llmchat.ui.components.ErrorBanner
-import com.mrrob.llmchat.ui.components.LargeTitle
+import com.mrrob.llmchat.ChatViewModel
+import com.mrrob.llmchat.data.ApiErrorKind
+import com.mrrob.llmchat.data.ConnectionEntity
+import com.mrrob.llmchat.data.Markdown
+import com.mrrob.llmchat.data.MessageEntity
+import com.mrrob.llmchat.ui.kit.AsterButton
+import com.mrrob.llmchat.ui.kit.ButtonVariant
+import com.mrrob.llmchat.ui.kit.IconsL
+import com.mrrob.llmchat.ui.kit.MarkdownText
+import com.mrrob.llmchat.ui.kit.SectionLabel
+import com.mrrob.llmchat.ui.kit.StatusDot
+import com.mrrob.llmchat.ui.theme.LocalDensity
+import com.mrrob.llmchat.ui.theme.LocalScheme
+import com.mrrob.llmchat.ui.theme.LocalType
 
 /**
- * Text-only chat screen: an iOS Messages-style transcript with white
- * bubbles, a large title, and a floating-style composer.
+ * 17 / 18 / 19 / 20 / 21 — text chat: header with model pill, transcript,
+ * streaming, message actions, variants, drafts and composer.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(viewModel: MainViewModel) {
-    val state by viewModel.chat.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
-    var input by rememberSaveable { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    val view = LocalView.current
+fun ChatScreen(
+    vm: ChatViewModel,
+    onBack: () -> Unit,
+    onVoice: () -> Unit,
+    onOpenConnections: () -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    val d = LocalDensity.current
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val conversation by vm.conversation.collectAsStateWithLifecycle()
+    val messages by vm.messages.collectAsStateWithLifecycle()
+    val streaming by vm.streaming.collectAsStateWithLifecycle()
+    val generating by vm.generating.collectAsStateWithLifecycle()
+    val online by vm.online.collectAsStateWithLifecycle()
+
+    val listState = rememberLazyListState()
+    var input by rememberSaveable { mutableStateOf("") }
+    var draftApplied by rememberSaveable { mutableStateOf(false) }
+    var showModelSheet by rememberSaveable { mutableStateOf(false) }
+    var menuMessage by remember { mutableStateOf<MessageEntity?>(null) }
+    var editMessage by remember { mutableStateOf<MessageEntity?>(null) }
+    var renameDialog by remember { mutableStateOf(false) }
+
+    // Restore the draft exactly once after the conversation loads.
+    LaunchedEffect(Unit) {
+        vm.draft.collect { text ->
+            if (!draftApplied && text.isNotBlank()) {
+                input = text
+                draftApplied = true
+            }
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        LargeTitle(title = "Chat")
+    val activeConnection = remember(conversation?.connectionId) { vm.activeConnection() }
+    val lastAssistantId = remember(messages) {
+        messages.lastOrNull { it.role == "assistant" }?.id
+    }
 
-        ErrorBanner(
-            message = state.error,
-            onDismiss = viewModel::dismissChatError,
-            modifier = Modifier.padding(horizontal = 20.dp)
-        )
+    // Auto-scroll while new content arrives.
+    LaunchedEffect(messages.size, streaming?.text?.length, generating) {
+        if (settings.autoScroll && (messages.isNotEmpty() || streaming != null)) {
+            listState.animateScrollToItem(messages.size)
+        }
+    }
 
-        Box(modifier = Modifier.weight(1f)) {
-            if (state.messages.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "Messages",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text(
-                        text = "Start a conversation with your model.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (!settings.isConfigured) {
-                        Spacer(modifier = Modifier.size(16.dp))
-                        Text(
-                            text = "Configure a server in Settings to begin.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+    Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
+        // ── Header ────────────────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                IconsL.chevronLeft, "Back", tint = c.textPrimary,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        vm.saveDraft(input)
+                        onBack()
                     }
+            )
+            Spacer(Modifier.width(8.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    conversation?.title?.ifBlank { "New conversation" } ?: "New conversation",
+                    style = t.rowTitle.copy(fontWeight = FontWeight.Bold, fontSize = 17.sp),
+                    color = c.textPrimary,
+                    maxLines = 1
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        conversation?.model?.ifBlank { activeConnection?.activeModel ?: "" } ?: "No model",
+                        style = t.caption,
+                        color = c.textSecondary,
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    StatusDot(online = online)
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (online) "Connected" else "Offline", style = t.caption, color = c.textSecondary)
                 }
+            }
+            Icon(
+                IconsL.more, "Options", tint = c.textSecondary,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { renameDialog = true }
+            )
+        }
+
+        // ── Transcript ────────────────────────────────────────────────────────
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (messages.isEmpty() && streaming == null && !generating) {
+                EmptyChat(onPick = { prompt -> input = prompt })
             } else {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(d.messageGap)
                 ) {
-                    items(state.messages, key = { it.id }) { message ->
-                        MessageBubble(message)
+                    items(messages, key = { it.id }) { message ->
+                        MessageRow(
+                            message = message,
+                            isLastAssistant = message.id == lastAssistantId,
+                            vm = vm,
+                            onLongPress = { menuMessage = message }
+                        )
+                    }
+                    val streamState = streaming
+                    if (generating && streamState != null) {
+                        item {
+                            if (streamState.text.isNotEmpty()) {
+                                StreamingBubble(text = streamState.text, onStop = vm::stopGenerating)
+                            } else {
+                                ThinkingRow()
+                            }
+                        }
+                    }
+                    streaming?.error?.let { err ->
+                        item {
+                            ErrorRecoveryCard(
+                                kind = err.kind,
+                                message = err.message,
+                                detail = err.detail,
+                                onTryAgain = vm::retryGeneration,
+                                onChangeModel = { showModelSheet = true },
+                                onCheckKey = onOpenConnections,
+                                onDismiss = vm::clearGenerationError
+                            )
+                        }
                     }
                 }
             }
         }
 
-        Surface(tonalElevation = 0.dp, color = MaterialTheme.colorScheme.surface) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    placeholder = { Text("Message", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(20.dp),
-                    maxLines = 5,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.outline,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedContainerColor = MaterialTheme.colorScheme.background,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.background
-                    )
+        // ── Composer ──────────────────────────────────────────────────────────
+        Composer(
+            value = input,
+            onValueChange = { input = it },
+            generating = generating,
+            placeholder = "Message Aster…",
+            enterToSend = settings.enterToSend,
+            onSend = {
+                val text = input
+                input = ""
+                draftApplied = true
+                vm.send(text)
+            },
+            onStop = vm::stopGenerating,
+            onMic = onVoice,
+            onModelClick = { showModelSheet = true },
+            modelLabel = conversation?.model?.ifBlank { activeConnection?.activeModel } ?: ""
+        )
+    }
+
+    // ── Model sheet (14) ─────────────────────────────────────────────────────
+    if (showModelSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showModelSheet = false },
+            sheetState = sheetState,
+            containerColor = c.card
+        ) {
+            ModelSheetContent(
+                groups = vm.sheetModels(),
+                current = conversation?.model.orEmpty(),
+                onSelect = { model ->
+                    vm.switchModel(model)
+                    showModelSheet = false
+                }
+            )
+        }
+    }
+
+    // ── Message actions popup (20) ───────────────────────────────────────────
+    menuMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { menuMessage = null },
+            containerColor = c.card,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    if (message.role == "user") "Message" else "Response",
+                    style = t.rowTitle,
+                    color = c.textPrimary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                val canSend = input.isNotBlank() && !state.sending
-                IconButton(
-                    onClick = {
-                        if (!canSend) return@IconButton
-                        viewModel.sendText(input)
-                        input = ""
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
-                    },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+            },
+            text = {
+                Column {
+                    ActionMenuItem(IconsL.copy, "Copy") {
+                        clipboard.setText(AnnotatedString(message.text))
+                        menuMessage = null
+                    }
+                    if (message.role == "assistant") {
+                        ActionMenuItem(IconsL.refresh, "Regenerate") {
+                            vm.regenerate(message)
+                            menuMessage = null
+                        }
+                        ActionMenuItem(IconsL.volume, "Read aloud") {
+                            vm.speak(Markdown.toPlainText(message.text))
+                            menuMessage = null
+                        }
+                    }
+                    if (message.role == "user") {
+                        ActionMenuItem(IconsL.pencil, "Edit") {
+                            editMessage = message
+                            menuMessage = null
+                        }
+                    }
+                    ActionMenuItem(IconsL.share, "Share") {
+                        shareText(context, message.text)
+                        menuMessage = null
+                    }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .height(1.dp)
+                            .background(c.border)
+                    )
+                    ActionMenuItem(IconsL.trash, "Delete", danger = true) {
+                        vm.deleteMessage(message)
+                        menuMessage = null
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { menuMessage = null }) { Text("Cancel", color = c.textSecondary) }
+            }
+        )
+    }
+
+    // ── Edit message dialog (branch / replace) ───────────────────────────────
+    editMessage?.let { message ->
+        var text by remember { mutableStateOf(message.text) }
+        AlertDialog(
+            onDismissRequest = { editMessage = null },
+            containerColor = c.card,
+            title = { Text("Edit message", style = t.cardTitle, color = c.textPrimary) },
+            text = {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 80.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(c.bg)
+                        .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                        .padding(14.dp)
                 ) {
-                    if (state.sending) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    BasicTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        textStyle = t.body.copy(color = c.textPrimary),
+                        cursorBrush = SolidColor(c.accent),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.editUserMessageInPlace(message, text)
+                    editMessage = null
+                }) { Text("Replace", color = c.accent, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        vm.editAndBranch(message, text)
+                        editMessage = null
+                    }) { Text("Branch", color = c.accent, fontWeight = FontWeight.SemiBold) }
+                    TextButton(onClick = { editMessage = null }) { Text("Cancel", color = c.textSecondary) }
+                }
+            }
+        )
+    }
+
+    // ── Rename conversation / share whole ────────────────────────────────────
+    conversation?.let { convForRename ->
+        if (renameDialog) {
+            var text by remember { mutableStateOf(convForRename.title) }
+        AlertDialog(
+            onDismissRequest = { renameDialog = false },
+            containerColor = c.card,
+            title = { Text("Conversation options", style = t.cardTitle, color = c.textPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(c.bg)
+                            .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        BasicTextField(
+                            value = text,
+                            onValueChange = { text = it },
+                            singleLine = true,
+                            textStyle = t.body.copy(color = c.textPrimary),
+                            cursorBrush = SolidColor(c.accent),
+                            modifier = Modifier.fillMaxWidth()
                         )
-                    } else {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
-                            tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    ActionMenuItem(IconsL.share, "Share full conversation") {
+                        shareText(context, vm.shareText())
+                        renameDialog = false
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (text.isNotBlank()) vm.rename(text.trim())
+                    renameDialog = false
+                }) { Text("Rename", color = c.accent, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameDialog = false }) { Text("Close", color = c.textSecondary) }
+            }
+        )
+        }
+    }
+}
+
+// ── Message rows ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun MessageRow(
+    message: MessageEntity,
+    isLastAssistant: Boolean,
+    vm: ChatViewModel,
+    onLongPress: () -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    val d = LocalDensity.current
+
+    when (message.role) {
+        "user" -> Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 280.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 20.dp,
+                                topEnd = 20.dp,
+                                bottomStart = 20.dp,
+                                bottomEnd = 6.dp
+                            )
                         )
+                        .background(c.accent)
+                        .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                        .padding(horizontal = d.bubbleH, vertical = d.bubbleV)
+                ) {
+                    Text(message.text, style = t.body, color = Color.White)
+                }
+                if (message.status == "QUEUED") {
+                    Text("Queued · will send when online", style = t.tiny, color = c.warning)
+                }
+            }
+        }
+
+        "assistant" -> Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .combinedClickable(onClick = {}, onLongClick = onLongPress),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            MarkdownText(
+                source = message.text,
+                streaming = false,
+                showCodeLineNumbers = vm.showCodeLineNumbers()
+            )
+            val count = vm.variantCount(message)
+            if (count > 1) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        IconsL.chevronLeft, "Previous response",
+                        tint = c.textSecondary,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { vm.cycleVariant(message, -1) }
+                    )
+                    Text(
+                        "Response ${vm.variantIndex(message)} of $count",
+                        style = t.tiny,
+                        color = c.textMuted
+                    )
+                    Icon(
+                        IconsL.chevronRight, "Next response",
+                        tint = c.textSecondary,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { vm.cycleVariant(message, 1) }
+                    )
+                }
+            }
+            if (isLastAssistant) {
+                MessagePills(message = message, vm = vm)
+            }
+        }
+
+        else -> Text(
+            text = message.text,
+            style = t.tiny,
+            color = c.textMuted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun MessagePills(message: MessageEntity, vm: ChatViewModel) {
+    val clipboard = LocalClipboardManager.current
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Pill(IconsL.copy, "Copy") { clipboard.setText(AnnotatedString(message.text)) }
+        Pill(IconsL.refresh, "Regenerate") { vm.regenerate(message) }
+        Pill(
+            IconsL.thumbUp, "Good",
+            active = message.rating == 1,
+            onToggle = { vm.rate(message, if (message.rating == 1) 0 else 1) }
+        )
+        Pill(
+            IconsL.thumbDown, "Bad",
+            active = message.rating == -1,
+            onToggle = { vm.rate(message, if (message.rating == -1) 0 else -1) }
+        )
+    }
+}
+
+@Composable
+private fun Pill(
+    icon: ImageVector,
+    label: String,
+    active: Boolean = false,
+    onToggle: () -> Unit = {}
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(if (active) c.accentTint else c.card)
+            .border(1.dp, if (active) c.accent else c.border, RoundedCornerShape(99.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggle
+            )
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = if (active) c.accent else c.textSecondary, modifier = Modifier.size(12.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            label,
+            style = t.desc.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            color = if (active) c.accent else c.textSecondary
+        )
+    }
+}
+
+// ── Streaming bubble (19) ────────────────────────────────────────────────────
+
+@Composable
+private fun StreamingBubble(text: String, onStop: () -> Unit) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        MarkdownText(source = text, streaming = true)
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(99.dp))
+                .background(c.card)
+                .border(1.dp, c.border, RoundedCornerShape(99.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onStop
+                )
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(IconsL.square, null, tint = c.textPrimary, modifier = Modifier.size(11.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(
+                "Stop generating",
+                style = t.desc.copy(fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold),
+                color = c.textPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThinkingRow() {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .border(2.dp, c.border, CircleShape)
+                .border(2.dp, c.accent, CircleShape)
+        )
+        Text("Thinking…", style = t.caption, color = c.textMuted)
+    }
+}
+
+// ── Error recovery (34) ──────────────────────────────────────────────────────
+
+@Composable
+private fun ErrorRecoveryCard(
+    kind: ApiErrorKind,
+    message: String,
+    detail: String,
+    onTryAgain: () -> Unit,
+    onChangeModel: () -> Unit,
+    onCheckKey: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    val title = when (kind) {
+        ApiErrorKind.INVALID_KEY -> "Invalid API key"
+        ApiErrorKind.RATE_LIMIT -> "You're going too fast"
+        ApiErrorKind.MODEL_NOT_FOUND -> "Model unavailable"
+        ApiErrorKind.CONTEXT_TOO_LARGE -> "Conversation is getting long"
+        ApiErrorKind.TIMEOUT -> "The request timed out"
+        ApiErrorKind.SERVER -> "The server had a problem"
+        ApiErrorKind.OFFLINE -> "You're offline"
+        else -> "Couldn't reach the server"
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (kind == ApiErrorKind.RATE_LIMIT) c.warningTint else c.card)
+            .border(1.dp, c.border, RoundedCornerShape(20.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(title, style = t.cardTitle, color = c.textPrimary)
+        Text(message, style = t.desc, color = c.textSecondary)
+        if (detail.isNotBlank()) {
+            Text(
+                detail.take(140),
+                style = t.monoSmall,
+                color = c.textMuted
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            when (kind) {
+                ApiErrorKind.INVALID_KEY -> {
+                    AsterButton(text = "Check API Key", modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onCheckKey)
+                    AsterButton(text = "Retry", variant = ButtonVariant.NEUTRAL, modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onTryAgain)
+                }
+                ApiErrorKind.MODEL_NOT_FOUND -> {
+                    AsterButton(text = "Change Model", modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onChangeModel)
+                    AsterButton(text = "Retry", variant = ButtonVariant.NEUTRAL, modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onTryAgain)
+                }
+                ApiErrorKind.CONTEXT_TOO_LARGE -> {
+                    AsterButton(text = "Start New Chat", modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onDismiss)
+                    AsterButton(text = "Continue", variant = ButtonVariant.NEUTRAL, modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onTryAgain)
+                }
+                else -> {
+                    AsterButton(text = "Try Again", modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onTryAgain)
+                    AsterButton(text = "Dismiss", variant = ButtonVariant.NEUTRAL, modifier = Modifier.weight(1f), height = 42.dp, radius = 13.dp, onClick = onDismiss)
+                }
+            }
+        }
+    }
+}
+
+// ── Empty chat (17) ──────────────────────────────────────────────────────────
+
+@Composable
+private fun EmptyChat(onPick: (String) -> Unit) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("What can I help with?", style = t.heroTitle.copy(fontSize = 22.sp), color = c.textPrimary)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Ask anything — or start with an idea below.",
+            style = t.caption.copy(fontSize = 14.sp),
+            color = c.textSecondary
+        )
+        Spacer(Modifier.height(24.dp))
+        val suggestions = listOf(
+            IconsL.lightbulb to ("Explain a concept" to "Like you're new to the topic"),
+            IconsL.mail to ("Draft an email" to "Polished and to the point"),
+            IconsL.bug to ("Debug my code" to "Find the bug, suggest a fix"),
+            IconsL.map to ("Plan a trip" to "Itineraries and local tips")
+        )
+        val prompts = mapOf(
+            "Explain a concept" to "Explain how HTTPS works, like I'm new to networking.",
+            "Draft an email" to "Draft a short, polite email to reschedule my meeting.",
+            "Debug my code" to "Why does my retry logic throw after the second attempt?",
+            "Plan a trip" to "Plan three days in Kyoto in late October."
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            suggestions.chunked(2).forEach { rowItems ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    rowItems.forEach { (icon, pair) ->
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(c.card)
+                                .border(1.dp, c.border, RoundedCornerShape(18.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { prompts[pair.first]?.let(onPick) }
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(icon, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                            Text(pair.first, style = t.rowTitle.copy(fontWeight = FontWeight.SemiBold), color = c.textPrimary)
+                            Text(
+                                pair.second,
+                                style = t.tiny.copy(fontSize = 11.5.sp, lineHeight = 16.sp),
+                                color = c.textSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -168,43 +757,262 @@ fun ChatScreen(viewModel: MainViewModel) {
     }
 }
 
-@Composable
-fun MessageBubble(message: ChatMessage) {
-    val isUser = message.role == ChatMessage.Role.USER
-    val bubbleColor = if (isUser) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val textColor = if (isUser) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val bubbleShape = RoundedCornerShape(
-        topStart = 20.dp,
-        topEnd = 20.dp,
-        bottomStart = if (isUser) 20.dp else 6.dp,
-        bottomEnd = if (isUser) 6.dp else 20.dp
-    )
+// ── Composer (17 / 18 / 21) ──────────────────────────────────────────────────
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-    ) {
-        Surface(
-            color = bubbleColor,
-            shape = bubbleShape,
-            tonalElevation = 0.dp,
-            shadowElevation = if (isUser) 0.dp else 1.dp,
-            modifier = Modifier.widthIn(max = 300.dp)
+@Composable
+private fun Composer(
+    value: String,
+    onValueChange: (String) -> Unit,
+    generating: Boolean,
+    placeholder: String,
+    enterToSend: Boolean,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    onMic: () -> Unit,
+    onModelClick: () -> Unit,
+    modelLabel: String
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    val d = LocalDensity.current
+    val canSend = value.isNotBlank() && !generating
+
+    Column(modifier = Modifier.fillMaxWidth().imePadding()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(21.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = message.text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = textColor,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            if (modelLabel.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(c.fill)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onModelClick
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    StatusDot(online = true)
+                    Text(
+                        "$modelLabel · Connected".replaceFirstChar { it.uppercase() },
+                        style = t.tiny.copy(fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold),
+                        color = c.textSecondary
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = d.composerV),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(c.card)
+                    .border(1.dp, c.border, RoundedCornerShape(22.dp))
+                    .heightIn(min = 44.dp, max = 140.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                textStyle = t.body.copy(fontSize = 15.sp, color = c.textPrimary),
+                cursorBrush = SolidColor(c.accent),
+                keyboardOptions = KeyboardOptions(imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default),
+                keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
+                maxLines = 5,
+                decorationBox = { inner ->
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (value.isEmpty()) {
+                                Text(
+                                    placeholder,
+                                    style = t.body.copy(fontSize = 15.sp),
+                                    color = c.textMuted,
+                                    maxLines = 1
+                                )
+                            }
+                            inner()
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            IconsL.mic, "Voice input",
+                            tint = c.textSecondary,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onMic
+                                )
+                        )
+                    }
+                }
             )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when {
+                            generating -> c.fill
+                            canSend -> c.accent
+                            else -> c.card
+                        }
+                    )
+                    .then(
+                        if (!canSend && !generating) Modifier.border(1.dp, c.border, CircleShape) else Modifier
+                    )
+                    .alpha(if (!canSend && !generating) 0.45f else 1f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = generating || canSend
+                    ) {
+                        if (generating) onStop() else onSend()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (generating) IconsL.square else IconsL.arrowUp,
+                    if (generating) "Stop" else "Send",
+                    tint = if (generating) c.textPrimary else Color.White,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
         }
     }
+}
+
+// ── Model sheet (14) ─────────────────────────────────────────────────────────
+
+@Composable
+private fun ModelSheetContent(
+    groups: List<Pair<ConnectionEntity, List<String>>>,
+    current: String,
+    onSelect: (String) -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .heightIn(max = 520.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Select Model", style = t.cardTitle.copy(fontSize = 20.sp), color = c.textPrimary)
+            Text("Applies to this chat", style = t.caption, color = c.textMuted)
+        }
+        Spacer(Modifier.height(10.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+                groups.forEachIndexed { gi, (conn, models) ->
+                    SectionLabel(if (gi == 0) "Recommended" else conn.name)
+                    models.forEach { model ->
+                        val selected = model == current
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (selected) c.accentTint else c.card)
+                                .border(
+                                    if (selected) 1.5.dp else 1.dp,
+                                    if (selected) c.accent else c.border,
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onSelect(model) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(model, style = t.rowTitle.copy(fontWeight = FontWeight.Bold), color = c.textPrimary)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StatusDot(online = conn.enabled)
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        "${conn.name} · ${if (conn.enabled) "Connected" else "Disabled"}",
+                                        style = t.caption,
+                                        color = c.textSecondary
+                                    )
+                                }
+                            }
+                            if (selected) {
+                                Box(
+                                    Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(c.accent),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(IconsL.check, "Selected", tint = Color.White, modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+
+@Composable
+private fun ActionMenuItem(
+    icon: ImageVector,
+    label: String,
+    danger: Boolean = false,
+    onClick: () -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, null, tint = if (danger) c.danger else c.textPrimary, modifier = Modifier.size(16.dp))
+        Text(label, style = t.bodyTight.copy(fontWeight = FontWeight.SemiBold), color = if (danger) c.danger else c.textPrimary)
+    }
+}
+
+private fun shareText(context: android.content.Context, text: String) {
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(android.content.Intent.createChooser(intent, "Share"))
 }

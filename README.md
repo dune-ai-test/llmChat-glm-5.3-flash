@@ -1,55 +1,55 @@
-# LLM Chat — Android (iOS-styled)
+# Aster — LLM Chat for Android
 
-A professional, iOS-styled Android chat client for **any OpenAI-compatible API**:
-
-- **Chat** — text-only conversations with an Apple Messages-style bubble transcript.
-- **Voice** — tap-to-talk voice conversations with continuous *listen → think → speak* rounds, while the full transcript stays visible on screen.
-- **Settings** — connect any server with **URL · API key · Model**, test the connection, and pick a model straight from the live `/models` list.
-
-Built with **Kotlin + Jetpack Compose (Material 3)**. The APK is built **entirely on GitHub Actions** — no local Android SDK or build required.
+A polished, Apple-inspired Android client for **any OpenAI-compatible API** —
+built to the HTML designs in [`ui/`](ui/) and the
+[functional product specification](ui/Complete%20Android%20LLM%20Client%20Functional%20Product%20Specification.md).
 
 ## Screens
 
-| Tab | What it does |
-|---|---|
-| **Chat** | Text-only chat. Messages render as iOS-style bubbles; history is sent with every request. |
-| **Voice** | Voice-only chat with a big tap-to-talk orb (pulses while listening, shows progress while thinking). Replies are spoken aloud via TTS and the transcript is shown below, including live captions of what you're saying. |
-| **Settings** | Enter the server base URL, API key and model. *Test Connection* calls `GET /models` and lets you tap a model from the returned list. Everything persists locally on the device. |
+- **Home** — greeting, current model card with connection status, quick actions
+  (New Chat / Voice Chat / Switch Model / Connections), recent chats and a
+  minimal activity summary. Adapts to first-run (no connection), connected and
+  offline states.
+- **Chats** — full history grouped by Today / Yesterday / Previous 7 days,
+  search, long-press actions: rename, pin, star, duplicate, archive, delete
+  with Undo.
+- **Voice** — full-screen voice session: pulsing orb, 10-bar waveform, live
+  transcript, continuous listen → think → speak loop with barge-in
+  interruption, mute / stop / end-session controls.
+- **Chat** — streaming responses with a stop button, markdown + syntax-colored
+  code blocks (copy button), long-press message actions (copy / regenerate /
+  edit / branch / share / read aloud / delete), response variants
+  ("Response 2 of 3"), model switching mid-conversation, drafts, offline queue.
+- **Connections** — unlimited connections: add, edit, duplicate, rename, set
+  default, enable/disable, delete, test.
+- **Add Connection wizard** — provider → API configuration (URL, key, models
+  fetched live via `/models`, manual entry) → staged connection test
+  (connecting / handshake / model check) → success & error screens with
+  recovery actions.
+- **Settings** — Chat (streaming, temperature, max tokens, system prompt +
+  presets), Voice (STT/TTS, voice, speaking rate, auto-play, continuous,
+  interrupt), Appearance (light/dark/system theme, font size, chat density),
+  Advanced API (custom headers, timeout, endpoint path, raw JSON parameters,
+  redacted debug logging), Data (export / import JSON, reset, delete all).
 
-The app speaks the **OpenAI Chat Completions** protocol:
+## Architecture
+
+- Kotlin + Jetpack Compose (Material 3 custom "Aster" design system: Inter,
+  warm neutrals, indigo accent, iOS-style grouped cards and floating tab bar).
+- Room database for conversations, messages and connections (migrations
+  supported); API keys stored in EncryptedSharedPreferences only.
+- Provider-agnostic OkHttp client: OpenAI-compatible `GET /models` and
+  `POST /v1/chat/completions` with SSE streaming, typed human-readable errors
+  and recovery actions.
+- Connectivity monitor drives the offline banner; messages sent while offline
+  are queued locally and flushed automatically on reconnect.
+
+## Building the APK (GitHub Actions only)
+
+The workflow builds debug + release APKs on every push and publishes them as
+the `LLM-Chat-APKs` artifact; pushing a tag like `v1.0.0` also attaches them
+to a GitHub Release. No local Android SDK needed.
 
 ```
-POST {base-url}/v1/chat/completions        ← chat requests
-GET  {base-url}/v1/models                  ← model list (Test Connection)
-Authorization: Bearer {api-key}
+.github/workflows/build-apk.yml
 ```
-
-`/v1` is appended automatically, so both `https://api.openai.com` and `https://host/v1` work — ideal for OpenAI, OpenRouter, Groq, Ollama, LM Studio, llama.cpp servers, etc.
-
-## Build the APK on GitHub (no local build)
-
-1. Push this repository to GitHub (branch `main` or `master`).
-2. GitHub Actions runs **Build APK** automatically on every push (or via *Run workflow*).
-3. Download the APKs from the run's **Artifacts** → `LLM-Chat-APKs`:
-   - `app-debug.apk` — installable debug build
-   - `app-release.apk` — release build signed with the debug key, so it installs directly
-4. Optional: push a tag like `v1.0.0` and the APKs are attached to a GitHub Release automatically.
-
-Workflow file: [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml)
-
-## Getting started in the app
-
-1. Open the **Settings** tab.
-2. Enter your **Server URL** (e.g. `https://api.openai.com`).
-3. Enter your **API key**.
-4. Tap **Test Connection** — the model list loads from the server.
-5. Tap a model from the list, then **Save Settings**.
-6. Start chatting in **Chat** or talking in **Voice**.
-
-> The microphone permission is requested the first time you start a voice session. Voice input uses the device's on-device speech recognizer; replies are spoken with the system TTS engine.
-
-## Tech notes
-
-- Min SDK 26 (Android 8.0), target SDK 35, Kotlin 2.0, Compose BOM 2024.09.
-- Networking via OkHttp with clear-text traffic allowed so local servers (`http://192.168.x.x`) work.
-- Settings persist in `SharedPreferences`; the API key never leaves the device except to the server you configured.

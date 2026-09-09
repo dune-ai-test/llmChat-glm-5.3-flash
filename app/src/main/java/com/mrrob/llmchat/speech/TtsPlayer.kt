@@ -17,15 +17,18 @@ class TtsPlayer(context: Context) {
 
     private var tts: TextToSpeech? = null
     private var ready = false
-    private var pendingText: String? = null
-    private var pendingDone: (() -> Unit)? = null
     private var activeDone: (() -> Unit)? = null
+
+    /** Speaking speed multiplier from Voice settings. */
+    @Volatile
+    var rate: Float = 1.1f
 
     init {
         tts = TextToSpeech(context) { status ->
             ready = status == TextToSpeech.SUCCESS
             if (ready) {
                 tts?.language = Locale.getDefault()
+                tts?.setSpeechRate(rate)
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
 
@@ -38,24 +41,30 @@ class TtsPlayer(context: Context) {
                         finishActive()
                     }
                 })
-                val text = pendingText
-                val done = pendingDone
-                pendingText = null
-                pendingDone = null
-                if (text != null) speak(text, done ?: {})
+                pendingText?.let { (text, done) ->
+                    pendingText = null
+                    speak(text, done)
+                }
             }
         }
     }
 
-    fun speak(text: String, onDone: () -> Unit) {
+    private var pendingText: Pair<String, () -> Unit>? = null
+
+    fun speak(text: String, onDone: () -> Unit = {}) {
         val engine = tts
         if (!ready || engine == null || text.isBlank()) {
             onDone()
             return
         }
         activeDone = onDone
-        engine.language = Locale.getDefault()
+        engine.setSpeechRate(rate)
         engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "reply_${utteranceCounter.incrementAndGet()}")
+    }
+
+    fun stop() {
+        tts?.stop()
+        finishActive()
     }
 
     fun shutdown() {
@@ -63,7 +72,7 @@ class TtsPlayer(context: Context) {
         tts?.shutdown()
         tts = null
         ready = false
-        finishActive()
+        activeDone = null
     }
 
     private fun finishActive() {
