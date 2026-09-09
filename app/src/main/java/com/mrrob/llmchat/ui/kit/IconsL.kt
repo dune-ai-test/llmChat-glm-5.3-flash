@@ -2,9 +2,9 @@ package com.mrrob.llmchat.ui.kit
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowUpward
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.automirrored.filled.Share
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.filled.Archive
@@ -31,7 +31,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.GraphicEq
-import androidx.compose.material.icons.filled.HardDrive
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.HourglassEmpty
@@ -87,7 +87,7 @@ object IconsL {
     val more: ImageVector get() = Icons.Outlined.MoreHoriz
     val info: ImageVector get() = Icons.Outlined.Info
     val arrowBack: ImageVector get() = Icons.AutoMirrored.Outlined.ArrowBack
-    val arrowUp: ImageVector get() = Icons.AutoMirrored.Filled.ArrowUpward
+    val arrowUp: ImageVector get() = Icons.Filled.KeyboardArrowUp
     val arrowSwap: ImageVector get() = Icons.Outlined.SwapHoriz
     val chevronLeft: ImageVector get() = Icons.Outlined.ChevronLeft
     val chevronRight: ImageVector get() = Icons.Outlined.ChevronRight
@@ -100,7 +100,7 @@ object IconsL {
     val download: ImageVector get() = Icons.Outlined.Download
     val lock: ImageVector get() = Icons.Outlined.Lock
     val shuffle: ImageVector get() = Icons.Outlined.Shuffle
-    val hardDrive: ImageVector get() = Icons.Filled.HardDrive
+    val hardDrive: ImageVector get() = Icons.Filled.Storage
     val code: ImageVector get() = Icons.Outlined.Code
     val braces: ImageVector get() = Icons.Outlined.Article
     val paperclip: ImageVector get() = Icons.Outlined.AttachFile
@@ -134,7 +134,7 @@ object IconsL {
     val keyRound: ImageVector get() = Icons.Outlined.Key
     val pin: ImageVector get() = Icons.Outlined.PushPin
     val archive: ImageVector get() = Icons.Filled.Archive
-    val share: ImageVector get() = Icons.AutoMirrored.Filled.Share
+    val share: ImageVector get() = Icons.Filled.Share
     val send: ImageVector get() = Icons.AutoMirrored.Outlined.Send
     val thermometer: ImageVector get() = Icons.Outlined.Thermostat
     val warning: ImageVector get() = Icons.Outlined.Info // warning triangle falls back to info
