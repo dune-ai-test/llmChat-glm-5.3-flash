@@ -109,6 +109,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                             "Imported ${r.count} conversation${if (r.count == 1) "" else "s"}."
                         is com.mrrob.llmchat.data.AppRepository.ImportResult.Failure ->
                             r.reason
+                        else -> null
                     }
                 } catch (_: Exception) {
                     importMessage = "That file couldn't be read."
@@ -467,8 +468,8 @@ fun ChatSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
             value = settings.systemPrompt,
             multiline = true,
             onDismiss = { promptDialog = false },
-            onSave = {
-                app.updateSettings { it.copy(systemPrompt = it, promptPreset = "custom") }
+            onSave = { text ->
+                app.updateSettings { s -> s.copy(systemPrompt = text, promptPreset = "custom") }
                 promptDialog = false
             }
         )
@@ -706,7 +707,7 @@ fun AdvancedApiScreen(app: AppViewModel, onBack: () -> Unit) {
     val defaultConn = remember(connections) { connections.firstOrNull { it.isDefault } }
 
     var headers by remember(defaultConn) {
-        mutableStateOf(
+        mutableStateOf<List<Pair<String, String>>>(
             defaultConn?.let { conn ->
                 app.repo.customHeadersOf(conn).entries.map { it.key to it.value }
             } ?: emptyList()

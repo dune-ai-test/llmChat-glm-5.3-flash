@@ -1,5 +1,6 @@
 package com.mrrob.llmchat.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,7 +80,7 @@ import com.mrrob.llmchat.ui.theme.LocalType
  * 17 / 18 / 19 / 20 / 21 — text chat: header with model pill, transcript,
  * streaming, message actions, variants, drafts and composer.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     vm: ChatViewModel,
@@ -423,6 +424,7 @@ fun ChatScreen(
 
 // ── Message rows ─────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
     message: MessageEntity,

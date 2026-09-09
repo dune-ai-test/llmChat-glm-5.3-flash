@@ -1,5 +1,6 @@
 package com.mrrob.llmchat.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -99,6 +100,7 @@ fun shortTimestamp(millis: Long): String {
  * The shared conversation row: bubble tile, title + preview, time + model chip.
  * Used on Home, Recent activity, Chats tab and Search results.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatListRow(
     conversation: ConversationEntity,
@@ -144,7 +146,7 @@ fun ChatListRow(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = if (highlight.isNotBlank()) highlightText(conversation.title, highlight) else conversation.title,
+                text = highlightText(conversation.title, highlight),
                 style = t.desc.copy(fontWeight = FontWeight.SemiBold, fontSize = t.desc.fontSize * 1.14f),
                 color = c.textPrimary,
                 maxLines = 1,
@@ -152,7 +154,7 @@ fun ChatListRow(
             )
             if (conversation.lastPreview.isNotBlank()) {
                 Text(
-                    text = if (highlight.isNotBlank()) highlightText(conversation.lastPreview, highlight) else conversation.lastPreview,
+                    text = highlightText(conversation.lastPreview, highlight),
                     style = t.micro.copy(fontSize = t.micro.fontSize * 1.18f),
                     color = c.textSecondary,
                     maxLines = 1,

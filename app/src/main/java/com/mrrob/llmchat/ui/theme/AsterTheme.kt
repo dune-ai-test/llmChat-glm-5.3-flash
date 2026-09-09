@@ -2,6 +2,7 @@ package com.mrrob.llmchat.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
@@ -173,7 +174,7 @@ fun buildType(scale: Float): AsterType {
             fontFamily = family,
             fontWeight = weight,
             fontSize = s(size),
-            lineHeight = if (line != null) s(line) else TextStyle.Unspecified.lineHeight,
+            lineHeight = if (line != null) s(line) else androidx.compose.ui.unit.TextUnit.Unspecified,
             letterSpacing = s(tracking)
         )
     return AsterType(

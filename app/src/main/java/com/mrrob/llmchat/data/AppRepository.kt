@@ -37,7 +37,13 @@ class AppRepository(
     fun customHeadersOf(connection: ConnectionEntity): Map<String, String> =
         try {
             val obj = JSONObject(settingsStore.prefsString("headers_${connection.id}", "{}"))
-            obj.keys().associateWith { obj.getString(it) }
+            val result = LinkedHashMap<String, String>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                result[k] = obj.getString(k)
+            }
+            result
         } catch (_: Exception) {
             emptyMap()
         }
@@ -146,15 +152,17 @@ class AppRepository(
     suspend fun createConversation(
         kind: String = "TEXT",
         title: String = "New conversation",
-        connectionId: String = defaultConnection()?.id.orEmpty(),
-        model: String = defaultConnection()?.activeModel.orEmpty(),
+        connectionId: String = "",
+        model: String = "",
         systemPrompt: String = "",
         branchOf: String = ""
     ): ConversationEntity {
+        val resolvedConnection = connectionId.ifBlank { defaultConnection()?.id.orEmpty() }
+        val resolvedModel = model.ifBlank { defaultConnection()?.activeModel.orEmpty() }
         val entity = ConversationEntity(
             title = title,
-            connectionId = connectionId,
-            model = model,
+            connectionId = resolvedConnection,
+            model = resolvedModel,
             systemPrompt = systemPrompt,
             kind = kind,
             voice = kind == "VOICE",

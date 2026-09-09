@@ -26,7 +26,6 @@ class ChatViewModel(
     val conversationId: String
 ) : ViewModel() {
 
-    private val repo = app.repo
     private val client = app.client
     private val settingsStore = app.settingsStore
 

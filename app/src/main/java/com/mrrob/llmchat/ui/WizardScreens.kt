@@ -322,6 +322,7 @@ fun WizardConfig(
                 val shown = (w.fetchedModels.ifEmpty { w.selectedModels } + w.activeModel.takeIf { it.isNotBlank() }.orEmpty())
                     .distinct()
                 if (shown.isEmpty()) {
+                    val modelsErr = w.modelsError
                     Box(
                         Modifier
                             .fillMaxWidth()
@@ -332,8 +333,8 @@ fun WizardConfig(
                     ) {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                             Text("No models yet", style = t.rowTitle, color = c.textPrimary)
-                            if (w.modelsError != null) {
-                                Text(w.modelsError, style = t.tiny, color = c.danger)
+                            if (modelsErr != null) {
+                                Text(modelsErr, style = t.tiny, color = c.danger)
                             }
                         }
                     }
@@ -671,7 +672,7 @@ fun WizardTest(
                             .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
                         Text(
-                            w.testError.message,
+                            w.testError?.message.orEmpty(),
                             style = t.caption.copy(fontWeight = FontWeight.Medium),
                             color = c.danger
                         )

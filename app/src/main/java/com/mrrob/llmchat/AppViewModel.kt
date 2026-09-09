@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mrrob.llmchat.data.ApiError
 import com.mrrob.llmchat.data.ApiErrorKind
+import com.mrrob.llmchat.data.AppRepository
 import com.mrrob.llmchat.data.AppSettings
 import com.mrrob.llmchat.data.ConnectionEntity
 import com.mrrob.llmchat.data.ConversationEntity
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Which tab of the root scaffold is showing. */

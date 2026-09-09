@@ -25,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,8 +83,8 @@ fun AsterCard(
             .clip(shape)
             .background(c.card)
             .border(1.dp, c.border, shape)
-            .then(if (onClick != null) Modifier.noRipple(onClick) else Modifier),
-        contentPadding = contentPadding,
+            .then(if (onClick != null) Modifier.noRipple(onClick) else Modifier)
+            .padding(contentPadding),
         content = content
     )
 }
@@ -296,7 +297,14 @@ fun AsterSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
             )
     ) {
         val target = if (checked) 19f else 0f
-        val animated by animateFloatAsState(targetValue = target, animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f), label = "knob")
+        val animated by animateFloatAsState(
+            targetValue = target,
+            animationSpec = androidx.compose.animation.core.spring<Float>(
+                dampingRatio = 0.8f,
+                stiffness = 380f
+            ),
+            label = "knob"
+        )
         Box(
             modifier = Modifier
                 .size(19.dp)
