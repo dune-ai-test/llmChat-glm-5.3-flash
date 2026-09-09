@@ -1,7 +1,6 @@
 package com.mrrob.llmchat.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,10 +125,12 @@ fun OnboardingScreen(onGetStarted: () -> Unit, onSkip: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 repeat(3) { i ->
                     val active = pagerState.currentPage == i
-                    val color by animateColorAsState(
-                        if (active) c.accent else c.border, label = "dot$i"
+                    Box(
+                        Modifier
+                            .size(if (active) 9.dp else 7.dp)
+                            .clip(CircleShape)
+                            .background(if (active) c.accent else c.border)
                     )
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(color))
                 }
             }
             AsterButton(
@@ -148,7 +149,7 @@ private fun OnboardPage(
     badge: String,
     headline: String,
     body: String,
-    props: List<Triple<ImageVector, String, String>>
+    props: List<Pair<ImageVector, Pair<String, String>>>
 ) {
     val c = LocalScheme.current
     val t = LocalType.current
@@ -171,7 +172,9 @@ private fun OnboardPage(
             Text(body, style = t.body.copy(color = c.textSecondary), textAlign = TextAlign.Left)
         }
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            props.forEach { (icon, title, desc) ->
+            props.forEach { (icon, pair) ->
+                val title = pair.first
+                val desc = pair.second
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
