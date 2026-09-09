@@ -178,6 +178,8 @@ private fun AsterNavigation(vm: AppViewModel) {
             )
             ChatScreen(
                 vm = chatVm,
+                favorites = vm.favoriteModels(),
+                onToggleFavorite = vm::toggleFavoriteModel,
                 onBack = { nav.popBackStack() },
                 onVoice = {
                     nav.popBackStack("main", inclusive = false)
@@ -187,6 +189,13 @@ private fun AsterNavigation(vm: AppViewModel) {
                     nav.popBackStack("main", inclusive = false)
                     vm.selectTab(AsterTab.CONNECTIONS)
                 }
+            )
+        }
+        composable("archived") {
+            ArchivedScreen(
+                app = vm,
+                onBack = { nav.popBackStack() },
+                onOpenChat = { id -> vm.openConversation(id) }
             )
         }
         composable("search") {
@@ -283,13 +292,13 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                     onSeeAll = { nav.navigate("recent") },
                     onOpenSettings = { vm.selectTab(AsterTab.SETTINGS) },
                     onOpenSearch = { nav.navigate("search") },
-                    onChangeModel = { nav.navigate("wizard/provider") },
                     onVoice = { vm.selectTab(AsterTab.VOICE) }
                 )
                 AsterTab.CHATS -> ChatsTab(
                     app = vm,
                     onOpenChat = { id -> vm.openConversation(id) },
-                    onOpenSearch = { nav.navigate("search") }
+                    onOpenSearch = { nav.navigate("search") },
+                    onOpenArchived = { nav.navigate("archived") }
                 )
                 AsterTab.VOICE -> VoiceTabHost(vm) { vm.selectTab(AsterTab.HOME) }
                 AsterTab.CONNECTIONS -> ConnectionsTab(

@@ -44,7 +44,8 @@ data class AppSettings(
     val rawParams: String = "",
     val debugLogging: Boolean = false,
 
-    val recentSearches: String = ""
+    val recentSearches: String = "",
+    val favoriteModels: String = ""
 ) {
     companion object {
         const val DEFAULT_SYSTEM_PROMPT =
@@ -108,7 +109,8 @@ class SettingsStore(context: Context) {
             apiVersion = getString("api_version", "").orEmpty(),
             rawParams = getString("raw_params", "").orEmpty(),
             debugLogging = getBoolean("debug_logging", false),
-            recentSearches = getString("recent_searches", "").orEmpty()
+            recentSearches = getString("recent_searches", "").orEmpty(),
+            favoriteModels = getString("favorite_models", "").orEmpty()
         )
     }
 
@@ -144,6 +146,7 @@ class SettingsStore(context: Context) {
             putString("raw_params", next.rawParams)
             putBoolean("debug_logging", next.debugLogging)
             putString("recent_searches", next.recentSearches)
+            putString("favorite_models", next.favoriteModels)
         }.apply()
     }
 

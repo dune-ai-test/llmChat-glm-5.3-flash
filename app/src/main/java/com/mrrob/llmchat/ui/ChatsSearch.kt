@@ -44,6 +44,7 @@ import com.mrrob.llmchat.ui.kit.AsterCard
 import com.mrrob.llmchat.ui.kit.AsterRow
 import com.mrrob.llmchat.ui.kit.CardDivider
 import com.mrrob.llmchat.ui.kit.CircleIconButton
+import com.mrrob.llmchat.ui.kit.ScreenTopBar
 import com.mrrob.llmchat.ui.kit.IconsL
 import com.mrrob.llmchat.ui.theme.LocalScheme
 import com.mrrob.llmchat.ui.theme.LocalType
@@ -53,7 +54,8 @@ import com.mrrob.llmchat.ui.theme.LocalType
 fun ChatsTab(
     app: AppViewModel,
     onOpenChat: (String) -> Unit,
-    onOpenSearch: () -> Unit
+    onOpenSearch: () -> Unit,
+    onOpenArchived: () -> Unit
 ) {
     val conversations by app.conversations.collectAsStateWithLifecycle()
     val archived by app.archived.collectAsStateWithLifecycle()
@@ -63,29 +65,28 @@ fun ChatsTab(
     var renameTarget by remember { mutableStateOf<ConversationEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<ConversationEntity?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
+        ScreenTopBar(
+            title = "Chats",
+            actions = {
+                CircleIconButton(
+                    icon = IconsL.plus,
+                    background = c.accent,
+                    tint = androidx.compose.ui.graphics.Color.White,
+                    bordered = false,
+                    iconSize = 19.dp,
+                    onClick = { app.startNewChat() }
+                )
+            }
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("Chats", style = t.largeTitle, color = c.textPrimary)
-            CircleIconButton(
-                icon = IconsL.plus,
-                background = c.accent,
-                tint = androidx.compose.ui.graphics.Color.White,
-                bordered = false,
-                iconSize = 19.dp,
-                onClick = { app.startNewChat() }
-            )
-        }
-        Spacer(Modifier.height(14.dp))
 
         // Search field (tap to open the search screen)
         Row(
@@ -144,17 +145,19 @@ fun ChatsTab(
             Spacer(Modifier.height(20.dp))
             AsterCard(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(),
-                onClick = { /* archived list accessible via long-press menu */ }
+                onClick = onOpenArchived
             ) {
                 AsterRow(
                     label = "Archived chats",
                     icon = IconsL.archive,
                     value = "${archived.size}",
-                    showChevron = true
+                    showChevron = true,
+                    onClick = onOpenArchived
                 )
             }
         }
         Spacer(Modifier.height(24.dp))
+        }
     }
 
     // Context menu
@@ -255,6 +258,96 @@ private fun MenuAction(label: String, danger: Boolean = false, onClick: () -> Un
             )
             .padding(horizontal = 8.dp, vertical = 12.dp)
     )
+}
+
+
+/** Archived conversations list: open or unarchive. */
+@Composable
+fun ArchivedScreen(
+    app: AppViewModel,
+    onBack: () -> Unit,
+    onOpenChat: (String) -> Unit
+) {
+    val archived by app.archived.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    val t = LocalType.current
+
+    Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
+        ScreenTopBar(
+            title = "Archived",
+            leading = {
+                CircleIconButton(
+                    icon = IconsL.chevronLeft,
+                    onClick = onBack,
+                    size = 32.dp,
+                    iconSize = 18.dp,
+                    bordered = false,
+                    tint = c.textPrimary
+                )
+            }
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
+            if (archived.isEmpty()) {
+                Spacer(Modifier.height(60.dp))
+                Text("No archived chats", style = t.cardTitle, color = c.textPrimary)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Long-press a chat in the list and choose Archive to keep it here.",
+                    style = t.caption,
+                    color = c.textSecondary
+                )
+            } else {
+                archived.forEach { conv ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onOpenChat(conv.id) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(c.card)
+                                .border(1.dp, c.border, RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (conv.voice) IconsL.mic else IconsL.chatSquare, null,
+                                tint = if (conv.voice) c.accent else c.textSecondary,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(conv.title, style = t.desc.copy(fontWeight = FontWeight.SemiBold, fontSize = 15.sp), color = c.textPrimary, maxLines = 1)
+                            if (conv.lastPreview.isNotBlank()) {
+                                Text(conv.lastPreview, style = t.micro.copy(fontSize = 13.sp), color = c.textSecondary, maxLines = 1)
+                            }
+                        }
+                        Spacer(Modifier.size(8.dp))
+                        CircleIconButton(
+                            icon = IconsL.archive,
+                            onClick = { app.toggleArchive(conv.id) },
+                            size = 36.dp,
+                            iconSize = 16.dp
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
 }
 
 /** 06 — Recent activity (full grouped list reached from Home "See All"). */

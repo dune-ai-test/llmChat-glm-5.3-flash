@@ -55,6 +55,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = settingsStore.update(transform)
 
+    fun favoriteModels(): List<String> =
+        settings.value.favoriteModels.lines().map(String::trim).filter(String::isNotBlank)
+
+    fun toggleFavoriteModel(id: String) {
+        settingsStore.update { st ->
+            val list = st.favoriteModels.lines().map(String::trim).filter(String::isNotBlank)
+            val next = if (id in list) list - id else list + id
+            st.copy(favoriteModels = next.joinToString("
+"))
+        }
+    }
+
+    /** Makes a connection's model the workspace default (used by the home model sheet). */
+    fun setDefaultModel(connectionId: String, model: String) {
+        viewModelScope.launch {
+            repo.setConnectionModel(connectionId, model)
+            repo.setDefaultConnection(connectionId)
+        }
+    }
+
     val connections: StateFlow<List<ConnectionEntity>> = repo.observeConnections()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -201,6 +221,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun wizardUrlChanged(url: String) {
         _wizard.update {
             it.copy(baseUrl = url, fetchedModels = settingsStore.cachedModels(url).ifEmpty { it.fetchedModels })
+        }
+    }
+
+    fun wizardToggleModel(model: String) {
+        _wizard.update { st ->
+            val next = if (model in st.selectedModels) st.selectedModels - model
+            else (st.selectedModels + model).distinct()
+            var act = st.activeModel
+            if (model in next && act.isBlank()) act = model
+            if (act.isNotEmpty() && act !in next) act = next.firstOrNull().orEmpty()
+            st.copy(
+                selectedModels = next,
+                activeModel = act,
+                fetchedModels = if (model in st.fetchedModels) st.fetchedModels else st.fetchedModels + model
+            )
+        }
+    }
+
+    fun wizardSetDefaultModel(model: String) {
+        _wizard.update {
+            it.copy(
+                activeModel = model,
+                selectedModels = (it.selectedModels + model).distinct(),
+                fetchedModels = if (model in it.fetchedModels) it.fetchedModels else it.fetchedModels + model
+            )
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.filled.Archive
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -139,4 +141,6 @@ object IconsL {
     val thermometer: ImageVector get() = Icons.Outlined.Thermostat
     val warning: ImageVector get() = Icons.Outlined.Info // warning triangle falls back to info
     val slider: ImageVector get() = Icons.Outlined.Thermostat
+    val star: ImageVector get() = Icons.Outlined.StarBorder
+    val starFilled: ImageVector get() = Icons.Filled.Star
 }

@@ -59,6 +59,7 @@ import com.mrrob.llmchat.ui.kit.CardDivider
 import com.mrrob.llmchat.ui.kit.IconsL
 import com.mrrob.llmchat.ui.kit.InfoStrip
 import com.mrrob.llmchat.ui.kit.SectionLabel
+import com.mrrob.llmchat.ui.kit.ScreenTopBar
 import com.mrrob.llmchat.ui.theme.LocalScheme
 import com.mrrob.llmchat.ui.theme.LocalType
 import kotlinx.coroutines.launch
@@ -119,15 +120,15 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp)
-    ) {
-        Text("Settings", style = t.largeTitle, color = c.textPrimary)
-        Spacer(Modifier.height(14.dp))
+    Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
+        ScreenTopBar(title = "Settings")
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
 
         AsterCard(
             onClick = { profileDialog = true },
@@ -270,6 +271,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
             AsterRow(label = "Privacy", icon = IconsL.block, showChevron = true, onClick = { privacyDialog = true })
         }
         Spacer(Modifier.height(28.dp))
+        }
     }
 
     if (privacyDialog) {

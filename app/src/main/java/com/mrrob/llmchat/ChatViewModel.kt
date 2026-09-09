@@ -395,6 +395,29 @@ class ChatViewModel(
         tts?.stop()
     }
 
+    /** Full conversation as Markdown (headers, model lines, code preserved). */
+    fun markdownText(): String {
+        val conv = _conversation.value ?: return ""
+        val sb = StringBuilder()
+        sb.appendLine("# ${conv.title}")
+        sb.appendLine()
+        if (conv.model.isNotBlank()) sb.appendLine("_Model: ${conv.model}_")
+        sb.appendLine()
+        _messages.value.forEach { m ->
+            when (m.role) {
+                "user" -> { sb.appendLine("**You**"); sb.appendLine(); sb.appendLine(m.text); sb.appendLine() }
+                "assistant" -> {
+                    sb.appendLine("**Assistant${if (m.model.isNotBlank()) " · ${m.model}" else ""}**")
+                    sb.appendLine()
+                    sb.appendLine(m.text)
+                    sb.appendLine()
+                }
+                else -> sb.appendLine("> ${m.text}").appendLine()
+            }
+        }
+        return sb.toString()
+    }
+
     fun shareText(): String {
         val conv = _conversation.value ?: return ""
         val sb = StringBuilder()

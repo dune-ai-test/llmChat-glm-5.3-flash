@@ -280,6 +280,37 @@ fun AsterChip(
     }
 }
 
+/** The uniform, non-scrolling top bar: large title + optional leading + actions. */
+@Composable
+fun ScreenTopBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    leading: (@Composable () -> Unit)? = null,
+    actions: (@Composable () -> Unit)? = null
+) {
+    val c = LocalScheme.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            title,
+            style = LocalType.current.largeTitle,
+            color = c.textPrimary,
+            maxLines = 1,
+            modifier = Modifier.weight(1f)
+        )
+        if (actions != null) actions()
+    }
+    Spacer(Modifier.height(2.dp))
+}
+
 /** iOS switch matching the design: 46x27 pill, indigo ON track. */
 @Composable
 fun AsterSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {

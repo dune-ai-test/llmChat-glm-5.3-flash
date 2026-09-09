@@ -10,6 +10,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -32,6 +33,10 @@ class VoiceViewModel(private val app: AppViewModel) : ViewModel() {
 
     private val _partial = MutableStateFlow("")
     val partial: StateFlow<String> = _partial.asStateFlow()
+
+    /** Live streaming assistant text while a voice reply is generating. */
+    private val _streamText = MutableStateFlow("")
+    val streamText: StateFlow<String> = _streamText.asStateFlow()
 
     private val _error = MutableStateFlow<ApiError?>(null)
     val error: StateFlow<ApiError?> = _error.asStateFlow()
@@ -115,21 +120,27 @@ class VoiceViewModel(private val app: AppViewModel) : ViewModel() {
             repo().touchConversation(conv.id, trimmed.take(80))
             reloadTranscript(conv.id)
             _phase.value = Phase.PROCESSING
+            _streamText.value = ""
             val wire = repo().wireMessages(repo().messagesOf(conv.id))
             try {
-                val result = app.client.complete(
-                    repo().resolveApi(connection),
-                    conv.model.ifBlank { connection.activeModel },
-                    wire,
-                    systemPrompt = conv.systemPrompt
-                )
+                val model = conv.model.ifBlank { connection.activeModel }
+                val result = if (app.settings.value.streaming) {
+                    app.client.streamChat(
+                        repo().resolveApi(connection), model, wire, conv.systemPrompt
+                    ) { delta -> _streamText.update { it + delta } }
+                } else {
+                    app.client.complete(repo().resolveApi(connection), model, wire, conv.systemPrompt)
+                }
+                _streamText.value = ""
                 repo().insertMessage(
                     MessageEntity(
                         conversationId = conv.id,
                         role = "assistant",
                         text = result.text,
                         model = conv.model.ifBlank { connection.activeModel },
-                        latencyMs = result.latencyMs
+                        latencyMs = result.latencyMs,
+                        tokensIn = result.tokensIn,
+                        tokensOut = result.tokensOut
                     )
                 )
                 repo().touchConversation(conv.id, result.text.take(80))

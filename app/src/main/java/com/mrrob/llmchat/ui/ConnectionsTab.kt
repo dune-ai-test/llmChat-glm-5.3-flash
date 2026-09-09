@@ -45,6 +45,7 @@ import com.mrrob.llmchat.ui.kit.CircleIconButton
 import com.mrrob.llmchat.ui.kit.IconTile
 import com.mrrob.llmchat.ui.kit.IconsL
 import com.mrrob.llmchat.ui.kit.InfoStrip
+import com.mrrob.llmchat.ui.kit.ScreenTopBar
 import com.mrrob.llmchat.ui.theme.LocalScheme
 import com.mrrob.llmchat.ui.theme.LocalType
 
@@ -63,29 +64,27 @@ fun ConnectionsTab(
     var renameTarget by remember { mutableStateOf<ConnectionEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<ConnectionEntity?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
+        ScreenTopBar(
+            title = "Connections",
+            actions = {
+                CircleIconButton(
+                    icon = IconsL.plus,
+                    background = c.accent,
+                    tint = Color.White,
+                    bordered = false,
+                    iconSize = 19.dp,
+                    onClick = onAdd
+                )
+            }
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text("Connections", style = t.largeTitle, color = c.textPrimary)
-            CircleIconButton(
-                icon = IconsL.plus,
-                background = c.accent,
-                tint = Color.White,
-                bordered = false,
-                iconSize = 19.dp,
-                onClick = onAdd
-            )
-        }
-        Spacer(Modifier.height(18.dp))
 
         if (connections.isEmpty()) {
             Column(
@@ -123,6 +122,7 @@ fun ConnectionsTab(
             )
         }
         Spacer(Modifier.height(24.dp))
+        }
     }
 
     menuFor?.let { conn ->

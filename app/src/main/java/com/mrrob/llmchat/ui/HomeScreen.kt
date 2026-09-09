@@ -7,7 +7,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,11 +19,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -39,14 +44,12 @@ import com.mrrob.llmchat.ui.kit.AsterButton
 import com.mrrob.llmchat.ui.kit.ButtonVariant
 import com.mrrob.llmchat.ui.kit.IconTile
 import com.mrrob.llmchat.ui.kit.IconsL
-import com.mrrob.llmchat.ui.kit.StatusPill
+import com.mrrob.llmchat.ui.kit.ScreenTopBar
 import com.mrrob.llmchat.ui.theme.LocalScheme
 import com.mrrob.llmchat.ui.theme.LocalType
 
-/**
- * 03 / 05 / 33 — Home dashboard with three states: connected, no connection
- * and the offline overlay (banner + queue card + dimmed cards).
- */
+/** 03 / 05 / 33 — Home dashboard: model card, quick chats, recents, offline states. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     app: AppViewModel,
@@ -54,31 +57,54 @@ fun HomeScreen(
     onSeeAll: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
-    onChangeModel: () -> Unit,
     onVoice: () -> Unit
 ) {
     val connections by app.connections.collectAsStateWithLifecycle()
     val conversations by app.conversations.collectAsStateWithLifecycle()
     val settings by app.settings.collectAsStateWithLifecycle()
     val online by app.online.collectAsStateWithLifecycle()
-    val todayCount by app.todayMessageCount.collectAsStateWithLifecycle()
     val queued by app.queuedCount.collectAsStateWithLifecycle()
     val c = LocalScheme.current
     val t = LocalType.current
+    var showModelSheet by rememberSaveable { mutableStateOf(false) }
+    var queueDismissed by remember { mutableStateOf(false) }
 
-    val active: ConnectionEntity? = connections.firstOrNull { it.isDefault } ?: connections.firstOrNull()
+    val active: ConnectionEntity? = remember(connections) {
+        connections.firstOrNull { it.isDefault } ?: connections.firstOrNull()
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .verticalScroll(rememberScrollState())
-    ) {
+    Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
+        // Fixed top bar: app name + avatar (opens Settings)
+        ScreenTopBar(
+            title = "Aster",
+            actions = {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(c.accentTint)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onOpenSettings
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        settings.displayName.take(1).uppercase().ifBlank { "M" },
+                        style = t.rowTitle,
+                        color = c.accent,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        )
+
         if (!online) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -90,92 +116,71 @@ fun HomeScreen(
                 ) {
                     Icon(IconsL.wifiOff, null, tint = c.warning, modifier = Modifier.size(15.dp))
                 }
-                Spacer(Modifier.size(10.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
                     "You're offline — chats are saved locally",
                     style = t.desc.copy(fontWeight = FontWeight.SemiBold),
                     color = c.warning
                 )
             }
-        }
-
-        if (queued > 0 && online) {
-            OfflineQueueCard(count = queued)
-            Spacer(Modifier.height(10.dp))
+        } else if (queued > 0 && !queueDismissed) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(c.fill)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(IconsL.cloudOff, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "$queued queued — sending automatically",
+                    style = t.desc,
+                    color = c.textSecondary,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    IconsL.close, "Dismiss", tint = c.textMuted,
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { queueDismissed = true }
+                )
+            }
         }
 
         Column(
-            modifier = Modifier.padding(horizontal = 20.dp),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(
-                        "Aster",
-                        style = t.pageTitle,
-                        color = c.textPrimary
-                    )
-                    Text(
-                        if (active == null) "Ready to get started?" else "Ready to start a conversation?",
-                        style = t.caption.copy(fontSize = 14.sp),
-                        color = c.textSecondary
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (active != null) {
-                        StatusPill(status = if (online) "Connected" else "Offline", online = online)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(c.accentTint)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = onOpenSettings
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("M", style = t.rowTitle, color = c.accent, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-
             if (active == null) {
                 HomeNoConnection(app = app)
             } else {
-                // Current model card
                 ModelCard(
                     connection = active,
                     dimmed = !online,
-                    onChangeModel = onChangeModel,
+                    onChangeModel = { showModelSheet = true },
                     onManage = { app.startEditConnection(active) }
                 )
 
-                // Quick actions
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        QuickAction(IconsL.chatAdd, "New Chat", "Start a text conversation", Modifier.weight(1f)) {
-                            app.startNewChat()
-                        }
-                        QuickAction(IconsL.mic, "Voice Chat", "Talk naturally with your model", Modifier.weight(1f)) {
-                            onVoice()
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        QuickAction(IconsL.arrowSwap, "Switch Model", "Change the active LLM", Modifier.weight(1f), dimmed = !online) {
-                            onChangeModel()
-                        }
-                        QuickAction(IconsL.server, "Connections", "Manage API providers", Modifier.weight(1f)) {
-                            app.selectTab(com.mrrob.llmchat.AsterTab.CONNECTIONS)
-                        }
-                    }
+                // Quick actions — the two primary entries
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    QuickAction(
+                        IconsL.chatAdd, "New Chat", "Start a text conversation",
+                        Modifier.weight(1f)
+                    ) { app.startNewChat() }
+                    QuickAction(
+                        IconsL.mic, "Voice Chat", "Talk with your model",
+                        Modifier.weight(1f)
+                    ) { onVoice() }
                 }
 
                 // Recent
@@ -208,12 +213,13 @@ fun HomeScreen(
                     }
                 } else {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Spacer(Modifier.height(28.dp))
                         Text("Start your first conversation", style = t.cardTitle, color = c.textPrimary)
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             "Tap New Chat above and talk to your model.",
                             style = t.caption,
@@ -222,45 +228,43 @@ fun HomeScreen(
                         Spacer(Modifier.height(16.dp))
                         AsterButton(
                             text = "New Chat",
-                            modifier = Modifier.fillMaxWidth(0.6f),
+                            modifier = Modifier.width(220.dp),
                             onClick = { app.startNewChat() }
                         )
                     }
                 }
-
-                // Today's activity
-                ActivityCard(
-                    messages = todayCount,
-                    conversations = conversations.size,
-                    voice = conversations.count { it.voice }
-                )
             }
             Spacer(Modifier.height(24.dp))
         }
     }
-}
 
-@Composable
-private fun OfflineQueueCard(count: Int) {
-    val c = LocalScheme.current
-    val t = LocalType.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(c.fill)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(IconsL.cloudOff, null, tint = c.textSecondary, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.size(12.dp))
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("$count messages queued", style = t.rowTitle, color = c.textPrimary)
-            Text("Will send automatically when you reconnect", style = t.caption, color = c.textSecondary)
+    if (showModelSheet && active != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val groups = remember(connections) {
+            connections.filter { it.enabled }.map { conn ->
+                conn to (app.repo.modelsOf(conn) + conn.activeModel).filter(String::isNotBlank).distinct()
+            }.filter { it.second.isNotEmpty() }
+        }
+        ModalBottomSheet(
+            onDismissRequest = { showModelSheet = false },
+            sheetState = sheetState,
+            containerColor = c.card
+        ) {
+            ModelSheetContent(
+                groups = groups,
+                current = active.activeModel,
+                favorites = app.favoriteModels(),
+                onToggleFavorite = app::toggleFavoriteModel,
+                onSelect = { model, connId ->
+                    app.setDefaultModel(connId, model)
+                    showModelSheet = false
+                }
+            )
         }
     }
 }
+
+// ── Pieces ───────────────────────────────────────────────────────────────────
 
 @Composable
 private fun ModelCard(
@@ -301,7 +305,8 @@ private fun ModelCard(
                 Text(
                     "${providerLabel(connection.provider)} · ${connection.name}",
                     style = t.desc,
-                    color = c.textSecondary
+                    color = c.textSecondary,
+                    maxLines = 1
                 )
             }
         }
@@ -377,48 +382,6 @@ private fun QuickAction(
     }
 }
 
-@Composable
-private fun ActivityCard(messages: Int, conversations: Int, voice: Int) {
-    val c = LocalScheme.current
-    val t = LocalType.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(c.fill)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            "TODAY'S ACTIVITY",
-            style = t.caption.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
-                letterSpacing = 0.8.sp
-            ),
-            color = c.textMuted
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            Stat("$messages", "Messages")
-            Stat("$conversations", "Conversations")
-            Stat("$voice", "Voice chats")
-        }
-    }
-}
-
-@Composable
-private fun Stat(value: String, label: String) {
-    val c = LocalScheme.current
-    val t = LocalType.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(value, style = t.sectionTitle, color = c.textPrimary)
-        Text(label, style = t.caption, color = c.textSecondary)
-    }
-}
-
 /** 05 — No-connection first-run experience. */
 @Composable
 private fun HomeNoConnection(app: AppViewModel) {
@@ -427,7 +390,7 @@ private fun HomeNoConnection(app: AppViewModel) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 60.dp, bottom = 40.dp),
+            .padding(top = 48.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
@@ -462,7 +425,7 @@ private fun HomeNoConnection(app: AppViewModel) {
             text = "How it works",
             variant = ButtonVariant.SECONDARY,
             modifier = Modifier.width(280.dp),
-            onClick = { /* info lives in Settings > About; keep simple */ }
+            onClick = { }
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("OpenAI", "OpenAI Compatible", "Custom API").forEach {

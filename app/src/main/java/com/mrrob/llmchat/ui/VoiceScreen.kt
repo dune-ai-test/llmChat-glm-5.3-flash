@@ -59,6 +59,7 @@ import com.mrrob.llmchat.data.MessageEntity
 import com.mrrob.llmchat.speech.SpeechRecognitionManager
 import com.mrrob.llmchat.speech.TtsPlayer
 import com.mrrob.llmchat.ui.kit.IconsL
+import com.mrrob.llmchat.ui.kit.ScreenTopBar
 import com.mrrob.llmchat.ui.kit.StatusDot
 import com.mrrob.llmchat.ui.theme.AsterColors
 import com.mrrob.llmchat.ui.theme.LocalScheme
@@ -216,66 +217,62 @@ fun VoiceScreen(
                 app.consumePendingVoice()
             }
         }
-        // ── Top bar ───────────────────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                IconsL.chevronDown, "Minimize", tint = c.textSecondary,
-                modifier = Modifier
-                    .size(22.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
+        // ── Top bar (matches Home / Chats / Connections placement) ─────────────
+        ScreenTopBar(
+            title = "Voice",
+            leading = {
+                Icon(
+                    IconsL.chevronDown, "Minimize", tint = c.textSecondary,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            recognizer.stopListening()
+                            onExit()
+                        }
+                )
+            },
+            actions = {
+                val currentModel = conversation?.model?.ifBlank { vm.connection()?.activeModel ?: "" }
+                    ?: vm.connection()?.activeModel ?: ""
+                if (currentModel.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.padding(end = 12.dp)
                     ) {
-                        recognizer.stopListening()
-                        onExit()
+                        Text(currentModel, style = t.caption, color = c.textSecondary, maxLines = 1)
+                        StatusDot(online = true)
                     }
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text("Voice Chat", style = t.rowTitle.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp), color = c.textPrimary)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(
-                        conversation?.model?.ifBlank { vm.connection()?.activeModel ?: "" }
-                            ?: vm.connection()?.activeModel ?: "",
-                        style = t.caption,
-                        color = c.textSecondary
+                }
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(if (showTranscript) c.accentTint else c.card)
+                        .border(1.dp, if (showTranscript) c.accentTint else c.border, RoundedCornerShape(99.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { showTranscript = !showTranscript }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        IconsL.chatSquare, "Transcript",
+                        tint = if (showTranscript) c.accent else c.textSecondary,
+                        modifier = Modifier.size(14.dp)
                     )
-                    StatusDot(online = true)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Transcript",
+                        style = t.caption.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (showTranscript) c.accent else c.textSecondary
+                    )
                 }
             }
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(if (showTranscript) c.accentTint else c.card)
-                    .border(1.dp, if (showTranscript) c.accentTint else c.border, RoundedCornerShape(99.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { showTranscript = !showTranscript }
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    IconsL.chatSquare, "Transcript",
-                    tint = if (showTranscript) c.accent else c.textSecondary,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Transcript",
-                    style = t.caption.copy(fontWeight = FontWeight.SemiBold),
-                    color = if (showTranscript) c.accent else c.textSecondary
-                )
-            }
-        }
+        )
 
         // ── Transcript panel ───────────────────────────────────────────────────
         if (showTranscript) {
@@ -396,6 +393,7 @@ fun VoiceScreen(
                     vm.endSession()
                     onExit()
                 })
+                DeckButton(IconsL.home, onClick = { recognizer.stopListening(); onExit() })
             }
         } else {
             Row(
@@ -421,6 +419,7 @@ fun VoiceScreen(
                     vm.endSession()
                     onExit()
                 })
+                DeckButton(IconsL.home, onClick = { recognizer.stopListening(); onExit() })
             }
         }
     }

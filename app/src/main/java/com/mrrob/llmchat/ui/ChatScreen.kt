@@ -86,6 +86,8 @@ import com.mrrob.llmchat.ui.theme.LocalType
 @Composable
 fun ChatScreen(
     vm: ChatViewModel,
+    favorites: List<String> = emptyList(),
+    onToggleFavorite: (String) -> Unit = {},
     onBack: () -> Unit,
     onVoice: () -> Unit,
     onOpenConnections: () -> Unit
@@ -104,7 +106,10 @@ fun ChatScreen(
     val online by vm.online.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
+    var detailsFor by remember { mutableStateOf<Long?>(null) }
+    val isAtBottom = remember { mutableStateOf(true) }
     var draftApplied by rememberSaveable { mutableStateOf(false) }
     var showModelSheet by rememberSaveable { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<MessageEntity?>(null) }
@@ -126,10 +131,19 @@ fun ChatScreen(
         messages.lastOrNull { it.role == "assistant" }?.id
     }
 
-    // Auto-scroll while new content arrives.
+    // Track whether the viewport sits at the bottom.
+    LaunchedEffect(Unit) {
+        androidx.compose.runtime.snapshotFlow {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            last == null || last.index >= info.totalItemsCount - 1
+        }.collect { isAtBottom.value = it }
+    }
+
+    // Auto-scroll while new content arrives — unless the user scrolled up to read.
     LaunchedEffect(messages.size, streaming?.text?.length, generating) {
-        if (settings.autoScroll && (messages.isNotEmpty() || streaming != null)) {
-            listState.animateScrollToItem(messages.size)
+        if (settings.autoScroll && isAtBottom.value && (messages.isNotEmpty() || generating)) {
+            listState.animateScrollToItem(messages.size.coerceAtLeast(0))
         }
     }
 
@@ -209,6 +223,10 @@ fun ChatScreen(
                         MessageRow(
                             message = message,
                             isLastAssistant = message.id == lastAssistantId,
+                            expandedDetails = detailsFor == message.id,
+                            onToggleDetails = {
+                                detailsFor = if (detailsFor == message.id) null else message.id
+                            },
                             vm = vm,
                             onLongPress = { menuMessage = message }
                         )
@@ -238,6 +256,38 @@ fun ChatScreen(
                     }
                 }
             }
+
+            if ((messages.isNotEmpty() || generating) && !isAtBottom.value) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                    Row(
+                        modifier = Modifier
+                            .padding(bottom = 10.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(c.card)
+                            .border(1.dp, c.border, RoundedCornerShape(99.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                scope.launch {
+                                    listState.animateScrollToItem(
+                                        (messages.size - 1).coerceAtLeast(0)
+                                    )
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(IconsL.chevronDown, null, tint = c.textPrimary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Latest",
+                            style = t.caption.copy(fontWeight = FontWeight.SemiBold),
+                            color = c.textPrimary
+                        )
+                    }
+                }
+            }
         }
 
         // ── Composer ──────────────────────────────────────────────────────────
@@ -245,6 +295,10 @@ fun ChatScreen(
             value = input,
             onValueChange = { input = it },
             generating = generating,
+            onHome = {
+                vm.saveDraft(input)
+                onBack()
+            },
             placeholder = "Message Aster…",
             enterToSend = settings.enterToSend,
             onSend = {
@@ -271,8 +325,10 @@ fun ChatScreen(
             ModelSheetContent(
                 groups = vm.sheetModels(),
                 current = conversation?.model.orEmpty(),
-                onSelect = { model ->
-                    vm.switchModel(model)
+                favorites = favorites,
+                onToggleFavorite = onToggleFavorite,
+                onSelect = { model, connId ->
+                    vm.switchModel(model, connId)
                     showModelSheet = false
                 }
             )
@@ -410,9 +466,12 @@ fun ChatScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-                    ActionMenuItem(IconsL.share, "Share full conversation") {
-                        shareText(context, vm.shareText())
+                    ActionMenuItem(IconsL.share, "Share as Markdown") {
+                        shareText(context, vm.markdownText())
                         renameDialog = false
+                    }
+                    ActionMenuItem(IconsL.copy, "Copy as Markdown") {
+                        clipboard.setText(AnnotatedString(vm.markdownText()))
                     }
                 }
             },
@@ -437,6 +496,8 @@ fun ChatScreen(
 private fun MessageRow(
     message: MessageEntity,
     isLastAssistant: Boolean,
+    expandedDetails: Boolean,
+    onToggleDetails: () -> Unit,
     vm: ChatViewModel,
     onLongPress: () -> Unit
 ) {
@@ -480,7 +541,7 @@ private fun MessageRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .combinedClickable(onClick = {}, onLongClick = onLongPress),
+                .combinedClickable(onClick = onToggleDetails, onLongClick = onLongPress),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             MarkdownText(
@@ -488,6 +549,27 @@ private fun MessageRow(
                 streaming = false,
                 showCodeLineNumbers = vm.showCodeLineNumbers()
             )
+            if (expandedDetails) {
+                val parts = buildList {
+                    if (message.tokensIn >= 0) add("${message.tokensIn} in")
+                    if (message.tokensOut >= 0) add("${message.tokensOut} out")
+                    if (message.latencyMs > 0) add("%.1fs".format(message.latencyMs / 1000f))
+                    if (message.tokensOut > 0 && message.latencyMs > 0) {
+                        add("%.1f tok/s".format(message.tokensOut * 1000f / message.latencyMs))
+                    }
+                    if (message.model.isNotBlank()) add(message.model)
+                }
+                if (parts.isNotEmpty()) {
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(c.fill)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(parts.joinToString("  \u00b7  "), style = t.tiny, color = c.textMuted)
+                    }
+                }
+            }
             val count = vm.variantCount(message)
             if (count > 1) {
                 Row(
@@ -774,6 +856,7 @@ private fun Composer(
     value: String,
     onValueChange: (String) -> Unit,
     generating: Boolean,
+    onHome: () -> Unit,
     placeholder: String,
     enterToSend: Boolean,
     onSend: () -> Unit,
@@ -824,6 +907,22 @@ private fun Composer(
                 .padding(horizontal = 16.dp, vertical = d.composerV),
             verticalAlignment = Alignment.Bottom
         ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(c.card)
+                    .border(1.dp, c.border, CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onHome
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(IconsL.home, "Home", tint = c.textSecondary, modifier = Modifier.size(19.dp))
+            }
+            Spacer(Modifier.width(8.dp))
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -904,93 +1003,6 @@ private fun Composer(
 }
 
 // ── Model sheet (14) ─────────────────────────────────────────────────────────
-
-@Composable
-private fun ModelSheetContent(
-    groups: List<Pair<ConnectionEntity, List<String>>>,
-    current: String,
-    onSelect: (String) -> Unit
-) {
-    val c = LocalScheme.current
-    val t = LocalType.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .heightIn(max = 520.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Select Model", style = t.cardTitle.copy(fontSize = 20.sp), color = c.textPrimary)
-            Text("Applies to this chat", style = t.caption, color = c.textMuted)
-        }
-        Spacer(Modifier.height(10.dp))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-                groups.forEachIndexed { gi, (conn, models) ->
-                    SectionLabel(if (gi == 0) "Recommended" else conn.name)
-                    models.forEach { model ->
-                        val selected = model == current
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (selected) c.accentTint else c.card)
-                                .border(
-                                    if (selected) 1.5.dp else 1.dp,
-                                    if (selected) c.accent else c.border,
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { onSelect(model) }
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text(model, style = t.rowTitle.copy(fontWeight = FontWeight.Bold), color = c.textPrimary)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    StatusDot(online = conn.enabled)
-                                    Spacer(Modifier.width(5.dp))
-                                    Text(
-                                        "${conn.name} · ${if (conn.enabled) "Connected" else "Disabled"}",
-                                        style = t.caption,
-                                        color = c.textSecondary
-                                    )
-                                }
-                            }
-                            if (selected) {
-                                Box(
-                                    Modifier
-                                        .size(20.dp)
-                                        .clip(CircleShape)
-                                        .background(c.accent),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(IconsL.check, "Selected", tint = Color.White, modifier = Modifier.size(12.dp))
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-    }
 
 @Composable
 private fun ActionMenuItem(
