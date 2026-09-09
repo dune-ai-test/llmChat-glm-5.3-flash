@@ -62,8 +62,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settingsStore.update { st ->
             val list = st.favoriteModels.lines().map(String::trim).filter(String::isNotBlank)
             val next = if (id in list) list - id else list + id
-            st.copy(favoriteModels = next.joinToString("
-"))
+            st.copy(favoriteModels = next.joinToString("\n"))
         }
     }
 
