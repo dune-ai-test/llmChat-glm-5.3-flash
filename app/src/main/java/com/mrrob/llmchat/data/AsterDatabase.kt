@@ -97,7 +97,7 @@ interface ConnectionDao {
     suspend fun byId(id: String): ConnectionEntity?
 
     @Query("SELECT * FROM connections WHERE isDefault = 1 LIMIT 1")
-    suspend fun default(): ConnectionEntity?
+    suspend fun defaultConnection(): ConnectionEntity?
 
     @Query("SELECT * FROM connections")
     suspend fun allOnce(): List<ConnectionEntity>

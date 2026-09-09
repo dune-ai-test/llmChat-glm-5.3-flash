@@ -22,7 +22,7 @@ class AppRepository(
 
     fun observeConnections(): Flow<List<ConnectionEntity>> = connectionDao.observeAll()
     suspend fun connection(id: String): ConnectionEntity? = connectionDao.byId(id)
-    suspend fun defaultConnection(): ConnectionEntity? = connectionDao.default()
+    suspend fun defaultConnection(): ConnectionEntity? = connectionDao.defaultConnection()
     private suspend fun allConnections(): List<ConnectionEntity> = connectionDao.allOnce()
 
     fun modelsOf(connection: ConnectionEntity): List<String> =
