@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.compose.animation.core.tween
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -122,7 +124,26 @@ private fun AsterNavigation(vm: AppViewModel) {
     }
 
     val start = if (vm.settings.value.onboardingDone) "main" else "splash"
-    NavHost(navController = nav, startDestination = start) {
+    NavHost(
+        navController = nav,
+        startDestination = start,
+        enterTransition = {
+            androidx.compose.animation.slideInHorizontally(tween(260)) { full -> full / 4 } +
+                androidx.compose.animation.fadeIn(tween(260))
+        },
+        exitTransition = {
+            androidx.compose.animation.fadeOut(tween(140)) +
+                androidx.compose.animation.slideOutHorizontally(tween(260)) { full -> -full / 5 }
+        },
+        popEnterTransition = {
+            androidx.compose.animation.slideInHorizontally(tween(260)) { full -> -full / 5 } +
+                androidx.compose.animation.fadeIn(tween(260))
+        },
+        popExitTransition = {
+            androidx.compose.animation.fadeOut(tween(140)) +
+                androidx.compose.animation.slideOutHorizontally(tween(260)) { full -> full / 4 }
+        }
+    ) {
         composable("splash") {
             SplashScreen(onFinished = {
                 nav.navigate(if (vm.settings.value.onboardingDone) "main" else "onboarding") {
@@ -171,14 +192,14 @@ private fun AsterNavigation(vm: AppViewModel) {
             SearchScreen(
                 app = vm,
                 onBack = { nav.popBackStack() },
-                onOpenChat = { id -> nav.navigate("chat/$id") }
+                onOpenChat = { id -> vm.openConversation(id) }
             )
         }
         composable("recent") {
             RecentActivityScreen(
                 app = vm,
                 onBack = { nav.popBackStack() },
-                onOpenChat = { id -> nav.navigate("chat/$id") },
+                onOpenChat = { id -> vm.openConversation(id) },
                 onOpenSearch = { nav.navigate("search") }
             )
         }
@@ -236,17 +257,20 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
     ) {
         Box(
             modifier = if (tab == AsterTab.VOICE) {
-                Modifier.fillMaxSize()
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
             } else {
                 Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .padding(bottom = 84.dp)
             }
         ) {
             when (tab) {
                 AsterTab.HOME -> HomeScreen(
                     app = vm,
-                    onOpenChat = { id -> nav.navigate("chat/$id") },
+                    onOpenChat = { id -> vm.openConversation(id) },
                     onSeeAll = { nav.navigate("recent") },
                     onOpenSettings = { vm.selectTab(AsterTab.SETTINGS) },
                     onOpenSearch = { nav.navigate("search") },
@@ -255,7 +279,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                 )
                 AsterTab.CHATS -> ChatsTab(
                     app = vm,
-                    onOpenChat = { id -> nav.navigate("chat/$id") },
+                    onOpenChat = { id -> vm.openConversation(id) },
                     onOpenSearch = { nav.navigate("search") }
                 )
                 AsterTab.VOICE -> VoiceTabHost(vm) { vm.selectTab(AsterTab.HOME) }
@@ -293,7 +317,7 @@ private fun FloatingTabBar(
         AsterTab.HOME to ("Home" to IconsL.home),
         AsterTab.CHATS to ("Chats" to IconsL.chatBubble),
         AsterTab.VOICE to ("Voice" to IconsL.mic),
-        AsterTab.CONNECTIONS to ("Connections" to IconsL.server),
+        AsterTab.CONNECTIONS to ("APIs" to IconsL.server),
         AsterTab.SETTINGS to ("Settings" to IconsL.settings)
     )
     Box(
@@ -354,7 +378,9 @@ private fun TabItem(
         Text(
             label,
             style = t.tiny.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp),
-            color = if (selected) c.accent else c.textMuted
+            color = if (selected) c.accent else c.textMuted,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Clip
         )
     }
 }
@@ -364,6 +390,7 @@ private fun TabItem(
 private fun VoiceTabHost(vm: AppViewModel, onExit: () -> Unit) {
     val voiceVm: VoiceViewModel = viewModel(factory = VoiceVmFactory(vm))
     VoiceScreen(
+        app = vm,
         vm = voiceVm,
         onExit = onExit,
         onOpenSettings = { vm.selectTab(AsterTab.SETTINGS) }

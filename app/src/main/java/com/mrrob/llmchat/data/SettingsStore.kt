@@ -155,6 +155,15 @@ class SettingsStore(context: Context) {
         prefs.edit().putString(key, value).apply()
     }
 
+    /** Fetched model lists cached per base URL, so a server only needs one fetch. */
+    fun cachedModels(baseUrl: String): List<String> = runCatching {
+        val arr = org.json.JSONArray(prefsString("models_$baseUrl", "[]"))
+        (0 until arr.length()).map { arr.getString(it) }
+    }.getOrDefault(emptyList())
+
+    fun setCachedModels(baseUrl: String, models: List<String>) =
+        prefsPutString("models_$baseUrl", org.json.JSONArray(models).toString())
+
     // ── API keys (encrypted, never in AppSettings or exports) ──────────────────
 
     fun apiKey(connectionId: String): String = runCatching {

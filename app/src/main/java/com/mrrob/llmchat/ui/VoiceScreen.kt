@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mrrob.llmchat.AppViewModel
 import com.mrrob.llmchat.VoiceViewModel
 import com.mrrob.llmchat.data.MessageEntity
 import com.mrrob.llmchat.speech.SpeechRecognitionManager
@@ -69,6 +71,7 @@ import com.mrrob.llmchat.ui.theme.LocalType
  */
 @Composable
 fun VoiceScreen(
+    app: AppViewModel,
     vm: VoiceViewModel,
     onExit: () -> Unit,
     onOpenSettings: () -> Unit
@@ -76,6 +79,7 @@ fun VoiceScreen(
     val c = LocalScheme.current
     val t = LocalType.current
     val context = LocalContext.current
+    val pendingVoice by app.pendingVoice.collectAsStateWithLifecycle()
 
     val phase by vm.phase.collectAsStateWithLifecycle()
     val transcript by vm.transcript.collectAsStateWithLifecycle()
@@ -84,7 +88,7 @@ fun VoiceScreen(
     val settings by vm.settings.collectAsStateWithLifecycle()
     val conversation by vm.conversation.collectAsStateWithLifecycle()
 
-    var showTranscript by remember { mutableStateOf(true) }
+    var showTranscript by remember { mutableStateOf(false) }
     var sessionActive by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(false) }
 
@@ -181,11 +185,37 @@ fun VoiceScreen(
         VoiceViewModel.Phase.SPEAKING -> "Tap to interrupt"
     }
 
+    fun micTap() {
+        if (!sessionActive) {
+            sessionActive = true
+            muted = false
+        }
+        when (phase) {
+            VoiceViewModel.Phase.READY -> {
+                if (!hasPermission.value) permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                else startListening()
+            }
+            VoiceViewModel.Phase.LISTENING -> recognizer.stopListening()
+            VoiceViewModel.Phase.PROCESSING -> vm.interrupt()
+            VoiceViewModel.Phase.SPEAKING -> {
+                tts.stop()
+                vm.interrupt()
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .navigationBarsPadding()
     ) {
+        LaunchedEffect(pendingVoice) {
+            pendingVoice?.let { id ->
+                vm.resume(id)
+                app.consumePendingVoice()
+            }
+        }
         // ── Top bar ───────────────────────────────────────────────────────────
         Row(
             modifier = Modifier
@@ -269,8 +299,29 @@ fun VoiceScreen(
                 }
             }
         } else {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                VoiceOrb(phase = phase, micEnabled = true)
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                VoiceOrb(phase = phase, micEnabled = !muted, onClick = { micTap() })
+                Spacer(Modifier.height(26.dp))
+                VoiceWave(
+                    phase = phase,
+                    active = phase == VoiceViewModel.Phase.LISTENING || phase == VoiceViewModel.Phase.SPEAKING
+                )
+                Spacer(Modifier.height(22.dp))
+                Text(centerLabel, style = t.heroTitle, color = c.textPrimary)
+                if (centerSub.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        centerSub,
+                        style = t.desc.copy(fontSize = 13.sp),
+                        color = c.textSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    )
+                }
             }
         }
 
@@ -306,7 +357,7 @@ fun VoiceScreen(
         }
 
         // ── Control deck (23 / 24 / 25) ────────────────────────────────────────
-        Column(
+        if (showTranscript) Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
@@ -332,30 +383,32 @@ fun VoiceScreen(
                     if (muted) recognizer.stopListening()
                     else if (phase == VoiceViewModel.Phase.READY && sessionActive) startListening()
                 })
-                CenterMic(
-                    phase = phase,
-                    onClick = {
-                        if (!sessionActive) {
-                            sessionActive = true
-                            muted = false
-                        }
-                        when (phase) {
-                            VoiceViewModel.Phase.READY -> {
-                                if (!hasPermission.value) {
-                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                } else {
-                                    startListening()
-                                }
-                            }
-                            VoiceViewModel.Phase.LISTENING -> recognizer.stopListening()
-                            VoiceViewModel.Phase.PROCESSING -> vm.interrupt()
-                            VoiceViewModel.Phase.SPEAKING -> {
-                                tts.stop()
-                                vm.interrupt()
-                            }
-                        }
-                    }
-                )
+                CenterMic(phase = phase, onClick = { micTap() })
+                DeckButton(IconsL.square, onClick = {
+                    recognizer.stopListening()
+                    tts.stop()
+                    vm.setPhase(VoiceViewModel.Phase.READY)
+                })
+                DeckButton(IconsL.callEnd, danger = true, onClick = {
+                    sessionActive = false
+                    recognizer.stopListening()
+                    tts.stop()
+                    vm.endSession()
+                    onExit()
+                })
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 40.dp, vertical = 20.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DeckButton(IconsL.micOff, activeBg = muted, onClick = {
+                    muted = !muted
+                    if (muted) recognizer.stopListening()
+                })
                 DeckButton(IconsL.square, onClick = {
                     recognizer.stopListening()
                     tts.stop()
@@ -543,12 +596,19 @@ private fun DeckButton(
 
 /** The fullscreen orb (22): layered circles + gradient core. */
 @Composable
-fun VoiceOrb(phase: VoiceViewModel.Phase, micEnabled: Boolean) {
+fun VoiceOrb(phase: VoiceViewModel.Phase, micEnabled: Boolean, onClick: () -> Unit) {
     val c = LocalScheme.current
     val transition = rememberInfiniteTransition(label = "orb")
     val breathe by transition.animateFloat(1f, 1.06f,
         infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "breathe")
-    Box(contentAlignment = Alignment.Center) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+    ) {
         Box(
             Modifier
                 .size(212.dp)

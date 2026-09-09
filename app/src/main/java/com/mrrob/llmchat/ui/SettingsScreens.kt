@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -378,6 +379,7 @@ fun ChatSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .imePadding()
     ) {
@@ -500,6 +502,7 @@ fun VoiceSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
         AsterBackHeader(title = "Voice", onBack = onBack)
@@ -598,6 +601,7 @@ fun AppearanceScreen(app: AppViewModel, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
         AsterBackHeader(title = "Appearance", onBack = onBack)
@@ -722,6 +726,7 @@ fun AdvancedApiScreen(app: AppViewModel, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .imePadding()
     ) {

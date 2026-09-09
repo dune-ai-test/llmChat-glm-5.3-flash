@@ -1,3 +1,6 @@
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.graphics.SolidColor
 package com.mrrob.llmchat.ui
 
 import androidx.compose.foundation.background
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -64,6 +68,7 @@ fun WizardIntro(app: AppViewModel, onBegin: () -> Unit, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
         Row(
@@ -201,6 +206,7 @@ fun WizardProvider(app: AppViewModel, onContinue: () -> Unit, onBack: () -> Unit
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .padding(horizontal = 20.dp, vertical = 8.dp)
     ) {
         WizardChrome(step = 1, title = "Choose a provider", subtitle = "You can change this later at any time.", onBack = onBack)
@@ -270,12 +276,13 @@ fun WizardConfig(
     val w by app.wizard.collectAsStateWithLifecycle()
     val c = LocalScheme.current
     val t = LocalType.current
-    var revealKey by remember { mutableStateOf(false) }
+    var showModelPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
         WizardChrome(
@@ -292,35 +299,48 @@ fun WizardConfig(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             WizardField(label = "API Base URL", value = w.baseUrl, placeholder = "https://api.openai.com", keyboard = KeyboardType.Uri) {
-                app.wizardState { state -> state.copy(baseUrl = it) }
+                app.wizardUrlChanged(it)
             }
             WizardField(
                 label = "API Key",
                 value = w.apiKey,
-                placeholder = "API key (optional)",
+                placeholder = if (w.hasExistingKey)
+                    "A saved key is in use - type a new one to replace it"
+                else
+                    "API key (optional)",
                 keyboard = KeyboardType.Password,
-                visual = if (revealKey) VisualTransformation.None else PasswordVisualTransformation(),
+                visual = PasswordVisualTransformation(),
                 trailing = {
-                    Icon(
-                        if (revealKey) IconsL.eyeOff else IconsL.eye, "Show key",
-                        tint = c.textMuted,
-                        modifier = Modifier
-                            .size(17.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) { revealKey = !revealKey }
-                    )
+                    if (w.hasExistingKey) {
+                        Icon(IconsL.lock, "Saved securely on this device", tint = c.success, modifier = Modifier.size(15.dp))
+                    }
                 }
             ) {
                 app.wizardState { state -> state.copy(apiKey = it) }
             }
 
-            // Models
+            // Models - cached per URL, searchable picker, or fetch live
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Models", style = t.desc.copy(fontWeight = FontWeight.Medium), color = c.textSecondary)
-                val shown = (w.fetchedModels.ifEmpty { w.selectedModels } + w.activeModel.takeIf { it.isNotBlank() }.orEmpty())
-                    .distinct()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Models", style = t.desc.copy(fontWeight = FontWeight.Medium), color = c.textSecondary)
+                    Text(
+                        "Add model",
+                        style = t.caption.copy(fontWeight = FontWeight.SemiBold),
+                        color = c.accent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { showModelPicker = true }
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                val shown = (w.fetchedModels + w.activeModel.takeIf { it.isNotBlank() && it !in w.fetchedModels }.orEmpty()).distinct()
                 if (shown.isEmpty()) {
                     val modelsErr = w.modelsError
                     Box(
@@ -332,7 +352,7 @@ fun WizardConfig(
                             .border(1.dp, c.border, RoundedCornerShape(14.dp))
                     ) {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Text("No models yet", style = t.rowTitle, color = c.textPrimary)
+                            Text("No models yet - fetch them or add one.", style = t.rowTitle, color = c.textPrimary)
                             if (modelsErr != null) {
                                 Text(modelsErr, style = t.tiny, color = c.danger)
                             }
@@ -352,10 +372,10 @@ fun WizardConfig(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
-                                app.wizardState {
-                                    it.copy(
+                                app.wizardState { state ->
+                                    state.copy(
                                         activeModel = model,
-                                        selectedModels = (it.selectedModels + model).distinct()
+                                        selectedModels = (state.selectedModels + model).distinct()
                                     )
                                 }
                             }
@@ -366,62 +386,39 @@ fun WizardConfig(
                         if (active) Icon(IconsL.check, "Selected", tint = c.accent, modifier = Modifier.size(16.dp))
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(c.fill)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                enabled = !w.fetchingModels
-                            ) { app.wizardFetchModels() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (w.fetchingModels) {
-                                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = c.accent)
-                            } else {
-                                Icon(IconsL.download, null, tint = c.accent, modifier = Modifier.size(16.dp))
-                            }
-                            Text(if (w.fetchingModels) "Fetching…" else "Fetch models", style = t.desc.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = c.accent)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(c.fill)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            enabled = !w.fetchingModels
+                        ) { app.wizardFetchModels() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (w.fetchingModels) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = c.accent)
+                        } else {
+                            Icon(IconsL.download, null, tint = c.accent, modifier = Modifier.size(16.dp))
                         }
-                    }
-                    var addOpen by remember { mutableStateOf(false) }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(c.accentTint)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                app.wizardState {
-                                    it.copy(
-                                        manualModel = it.manualModel.ifBlank { it.activeModel.ifBlank { "my-model" } }
-                                    )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(IconsL.plus, null, tint = c.accent, modifier = Modifier.size(16.dp))
-                            Text("Add model", style = t.desc.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = c.accent)
-                        }
-                    }
-                    if (addOpen) {
-                        addOpen = false
+                        Text(if (w.fetchingModels) "Fetching..." else "Fetch models", style = t.desc.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold), color = c.accent)
                     }
                 }
-                if (w.manualModel.isNotBlank()) {
-            WizardField(label = "Manual model id", value = w.manualModel, placeholder = "my-model") {
-                app.wizardState { state -> state.copy(manualModel = it) }
             }
-                }
+
+            if (showModelPicker) {
+                ModelPickerDialog(
+                    fetched = w.fetchedModels,
+                    onDismiss = { showModelPicker = false },
+                    onPick = { name ->
+                        app.wizardAddModel(name)
+                        showModelPicker = false
+                    }
+                )
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -468,8 +465,123 @@ fun WizardConfig(
     }
 }
 
+/** Search the fetched list or type a model id; tapping a result makes it active. */
 @Composable
-private fun WizardChrome(step: Int, title: String, subtitle: String, onBack: () -> Unit) {
+private fun ModelPickerDialog(
+    fetched: List<String>,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit
+) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    var query by remember { mutableStateOf("") }
+    var typed by remember { mutableStateOf("") }
+    val filtered = remember(fetched, query) {
+        if (query.isBlank()) fetched
+        else fetched.filter { it.contains(query.trim(), ignoreCase = true) }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.card,
+        shape = RoundedCornerShape(18.dp),
+        title = { Text("Add model", style = t.cardTitle, color = c.textPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(c.bg)
+                        .border(1.dp, c.border, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp)
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        textStyle = t.rowTitle.copy(color = c.textPrimary),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(c.accent),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.CenterStart),
+                        decorationBox = { inner ->
+                            Box {
+                                if (query.isEmpty()) Text("Search fetched models...", style = t.rowTitle, color = c.textMuted)
+                                inner()
+                            }
+                        }
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(c.bg)
+                        .border(1.dp, c.border, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp)
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        singleLine = true,
+                        textStyle = t.rowTitle.copy(color = c.textPrimary),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(c.accent),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        decorationBox = { inner ->
+                            Box {
+                                if (typed.isEmpty()) Text("Or type a model id...", style = t.rowTitle, color = c.textMuted)
+                                inner()
+                            }
+                        }
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (filtered.isEmpty() && query.isNotBlank()) {
+                        Text("No fetched model matches.", style = t.caption, color = c.textMuted, modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                    filtered.forEach { model ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onPick(model) }
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(model, style = t.rowTitle, color = c.textPrimary, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { if (typed.isNotBlank()) onPick(typed) }
+            ) { Text("Use typed", color = if (typed.isNotBlank()) c.accent else c.textMuted, fontWeight = FontWeight.SemiBold) }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel", color = c.textSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun WizardChrome(
+step: Int, title: String, subtitle: String, onBack: () -> Unit) {
     val c = LocalScheme.current
     val t = LocalType.current
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -579,6 +691,7 @@ fun WizardTest(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .padding(horizontal = 24.dp, vertical = 8.dp)
     ) {
         WizardChrome(step = 2, title = "Connection details", subtitle = "", onBack = onCancel)
@@ -590,7 +703,14 @@ fun WizardTest(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             ReadLine("API Base URL", w.baseUrl)
-            ReadLine("API Key", maskKeyForDisplay(w.apiKey))
+            ReadLine(
+                "API Key",
+                when {
+                    w.apiKey.isNotBlank() -> maskKeyForDisplay(w.apiKey)
+                    w.hasExistingKey -> "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022  (saved)"
+                    else -> "None"
+                }
+            )
             ReadLine("Model", w.activeModel.ifBlank { w.selectedModels.firstOrNull().orEmpty() })
 
             if (w.testError == null) {

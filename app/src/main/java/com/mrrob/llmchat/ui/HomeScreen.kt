@@ -134,7 +134,12 @@ fun HomeScreen(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(c.accentTint),
+                            .background(c.accentTint)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onOpenSettings
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("M", style = t.rowTitle, color = c.accent, fontWeight = FontWeight.SemiBold)

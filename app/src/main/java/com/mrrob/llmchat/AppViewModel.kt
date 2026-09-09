@@ -104,11 +104,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectTab(tab: AsterTab) { _tab.value = tab }
     fun goChat(conversationId: String) { _openConversationId.value = conversationId }
+
+    /** Open a conversation: voice chats continue in the Voice tab, text chats in Chat. */
+    fun openConversation(id: String) {
+        viewModelScope.launch {
+            val conv = conversations.value.firstOrNull { it.id == id } ?: repo.conversation(id)
+            if (conv != null && conv.voice) {
+                _tab.value = AsterTab.VOICE
+                _pendingVoice.value = id
+            } else {
+                goChat(id)
+            }
+        }
+    }
+
+    private val _pendingVoice = MutableStateFlow<String?>(null)
+    val pendingVoice: StateFlow<String?> = _pendingVoice.asStateFlow()
+    fun consumePendingVoice() { _pendingVoice.value = null }
+
     fun startNewChat() {
         viewModelScope.launch {
             val conv = repo.createConversation(kind = "TEXT")
             goChat(conv.id)
         }
+    }
+
+    /** Start a fresh voice session conversation. */
+    fun startVoiceConversation() {
+        _tab.value = AsterTab.VOICE
     }
 
     // ── Connection wizard ───────────────────────────────────────────────────────
@@ -132,9 +155,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val streamingOk: Boolean = false,
         val setAsDefault: Boolean = true,
         val saved: Boolean = false,
+        val hasExistingKey: Boolean = false,
         val editingConnectionId: String? = null
     ) {
-        val models: List<String> get() = (selectedModels + manualModel.takeIf { it.isNotBlank() }.orEmpty()).distinct()
+        val models: List<String> get() = (selectedModels + activeModel.takeIf { it.isNotBlank() }.orEmpty()).distinct()
     }
 
     private val _wizard = MutableStateFlow(WizardState())
@@ -143,6 +167,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun wizardState(update: (WizardState) -> WizardState) {
         _wizard.value = update(_wizard.value)
     }
+
+    /** The key to use for live calls: freshly typed, else the encrypted saved one. */
+    private fun effectiveKey(w: WizardState): String =
+        w.apiKey.ifBlank { w.editingConnectionId?.let { settingsStore.apiKey(it) } ?: "" }
 
     fun startWizard() {
         _wizard.value = WizardState()
@@ -163,7 +191,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 provider = provider,
                 name = if (it.editingConnectionId == null) name else it.name,
                 baseUrl = if (it.editingConnectionId == null) url else it.baseUrl,
-                activeModel = if (it.editingConnectionId == null) model else it.activeModel
+                activeModel = if (it.editingConnectionId == null) model else it.activeModel,
+                fetchedModels = it.fetchedModels.ifEmpty { settingsStore.cachedModels(url) }
+            )
+        }
+    }
+
+    /** When the URL changes, restore any model list previously fetched for that server. */
+    fun wizardUrlChanged(url: String) {
+        _wizard.update {
+            it.copy(baseUrl = url, fetchedModels = settingsStore.cachedModels(url).ifEmpty { it.fetchedModels })
+        }
+    }
+
+    /** Adds a typed or picked model: marks it selected and active if none set. */
+    fun wizardAddModel(name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        _wizard.update {
+            it.copy(
+                fetchedModels = (it.fetchedModels + clean).distinct(),
+                selectedModels = (it.selectedModels + clean).distinct(),
+                activeModel = it.activeModel.ifBlank { clean }
             )
         }
     }
@@ -178,6 +227,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val models = client.listModels(tempApi(w))
+                settingsStore.setCachedModels(w.baseUrl, models)
                 _wizard.update {
                     it.copy(
                         fetchingModels = false,
@@ -194,7 +244,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun tempApi(w: WizardState) = com.mrrob.llmchat.data.ResolvedApi(
         name = w.name,
         baseUrl = w.baseUrl,
-        apiKey = w.apiKey,
+        apiKey = effectiveKey(w),
         endpointPath = settingsStore.settings.value.endpointPath
     )
 
@@ -225,10 +275,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         testRunning = false,
                         latencyMs = outcome.latencyMs,
                         streamingOk = true,
-                        fetchedModels = it.fetchedModels.ifEmpty { outcome.models },
+                        fetchedModels = outcome.models,
                         steps = it.steps.mapValues { TestStepState.DONE }
                     )
                 }
+                settingsStore.setCachedModels(w.baseUrl, outcome.models)
             } catch (e: ApiError) {
                 _wizard.update { it.copy(testRunning = false, testError = e) }
             } catch (e: Exception) {
@@ -241,7 +292,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun wizardSaveAndFinish() {
         val w = _wizard.value
-        val models = (w.selectedModels + w.manualModel.takeIf { it.isNotBlank() }.orEmpty()).distinct()
+        val models = (w.selectedModels + w.activeModel.takeIf { it.isNotBlank() }.orEmpty()).distinct()
         val saved = repo.saveConnection(
             id = w.editingConnectionId,
             name = w.name.ifBlank { "New connection" },
@@ -258,16 +309,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startEditConnection(connection: ConnectionEntity) {
-        val models = repo.modelsOf(connection)
+        val savedKey = settingsStore.apiKey(connection.id)
+        val models = (repo.modelsOf(connection) + settingsStore.cachedModels(connection.baseUrl)).distinct()
         _wizard.value = WizardState(
             provider = connection.provider,
             name = connection.name,
             baseUrl = connection.baseUrl,
-            apiKey = settingsStore.apiKey(connection.id),
+            apiKey = "", // the saved key is never shown — blank means "keep the stored one"
             fetchedModels = models,
-            selectedModels = models,
+            selectedModels = repo.modelsOf(connection),
             activeModel = connection.activeModel,
             setAsDefault = connection.isDefault,
+            hasExistingKey = savedKey.isNotBlank(),
             editingConnectionId = connection.id
         )
         _navigate.value = "wizard/config"

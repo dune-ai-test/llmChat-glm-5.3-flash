@@ -46,6 +46,20 @@ class VoiceViewModel(private val app: AppViewModel) : ViewModel() {
         app.connections.value.firstOrNull { it.isDefault && it.enabled }
             ?: app.connections.value.firstOrNull { it.enabled }
 
+    /** Continue an existing voice conversation: load its transcript and reuse it. */
+    fun resume(id: String) {
+        if (conversationId == id) return
+        endSession()
+        conversationId = id
+        viewModelScope.launch {
+            repo().conversation(id)?.let { conv ->
+                _conversation.value = conv
+                _transcript.value = repo().messagesOf(id)
+            }
+            _phase.value = Phase.READY
+        }
+    }
+
     fun setPhase(phase: Phase) {
         if (phase == Phase.LISTENING) _partial.value = ""
         _phase.value = phase
@@ -87,8 +101,16 @@ class VoiceViewModel(private val app: AppViewModel) : ViewModel() {
         }
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
+            val existing = _conversation.value
+            val connection = existing?.connectionId?.let { repo().connection(it) }
+                ?: connection().takeIf { it != null }
+                ?: run {
+                    _error.value = ApiError(com.mrrob.llmchat.data.ApiErrorKind.NETWORK, "Add a connection in Settings first.")
+                    _phase.value = Phase.READY
+                    return@launch
+                }
             _error.value = null
-            val conv = ensureConversation(connection)
+            val conv = existing ?: ensureConversation(connection)
             repo().insertMessage(MessageEntity(conversationId = conv.id, role = "user", text = trimmed))
             repo().touchConversation(conv.id, trimmed.take(80))
             reloadTranscript(conv.id)

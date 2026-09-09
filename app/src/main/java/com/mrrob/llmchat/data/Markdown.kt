@@ -206,14 +206,22 @@ object Markdown {
     fun toPlainText(text: String): String =
         parseBlocks(text).joinToString("\n\n") { block ->
             when (block) {
-                is MdBlock.Heading -> block.text
-                is MdBlock.Paragraph -> block.text
-                is MdBlock.Bullets -> block.items.map { "• $it" }.joinToString("\n")
-                is MdBlock.Ordered -> block.items.mapIndexed { idx, item -> "${idx + 1}. $item" }.joinToString("\n")
-                is MdBlock.Quote -> block.text
+                is MdBlock.Heading -> stripInline(block.text)
+                is MdBlock.Paragraph -> stripInline(block.text)
+                is MdBlock.Bullets -> block.items.joinToString("\n") { "• " + stripInline(it) }
+                is MdBlock.Ordered -> block.items.mapIndexed { idx, item -> "${idx + 1}. " + stripInline(item) }.joinToString("\n")
+                is MdBlock.Quote -> stripInline(block.text)
                 is MdBlock.Code -> block.code
                 is MdBlock.Table -> block.rows.joinToString("\n") { row -> row.joinToString("  |  ") }
                 MdBlock.Rule -> ""
             }
         }
+
+    /** Remove inline markup: bold/italic stars and underscores, code backticks, links. */
+    fun stripInline(s: String): String =
+        LINK_PATTERN.replace(s) { it.groupValues[1] }
+            .replace(Regex("\\*\\*|__|\\*|_"), "")
+            .replace("`", "")
+
+    private val LINK_PATTERN = Regex("\\[([^\\]]+)]\\(([^)]+)\\)")
 }
