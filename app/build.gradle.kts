@@ -25,6 +25,8 @@ android {
                 storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                    ?.ifBlank { System.getenv("ANDROID_KEYSTORE_PASSWORD") }
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
             }
         }
     }
