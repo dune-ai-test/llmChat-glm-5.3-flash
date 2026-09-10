@@ -351,54 +351,6 @@ fun ArchivedScreen(
     }
 }
 
-/** 06 — Recent activity (full grouped list reached from Home "See All"). */
-@Composable
-fun RecentActivityScreen(
-    app: AppViewModel,
-    onBack: () -> Unit,
-    onOpenChat: (String) -> Unit,
-    onOpenSearch: () -> Unit
-) {
-    val conversations by app.conversations.collectAsStateWithLifecycle()
-    val c = LocalScheme.current
-    val t = LocalType.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Recent", style = t.largeTitle, color = c.textPrimary)
-            CircleIconButton(icon = IconsL.search, onClick = onOpenSearch)
-        }
-        Spacer(Modifier.height(12.dp))
-        if (conversations.isEmpty()) {
-            Text("Nothing here yet.", style = t.desc, color = c.textSecondary)
-        } else {
-            groupedSections(conversations).forEach { (section, items) ->
-                Text(
-                    section.name.uppercase(),
-                    style = t.caption.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
-                    color = c.textMuted,
-                    modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
-                )
-                items.forEach { conv ->
-                    ChatListRow(conversation = conv, onClick = { onOpenChat(conv.id) })
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-}
-
 /** 16 — Search screen: active field, filters, results with highlight, recents. */
 @Composable
 fun SearchScreen(

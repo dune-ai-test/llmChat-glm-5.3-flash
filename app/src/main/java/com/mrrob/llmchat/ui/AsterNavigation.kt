@@ -261,56 +261,6 @@ private fun AsterNavigation(vm: AppViewModel) {
                 onOpenChat = { id -> vm.openConversation(id) }
             )
         }
-        composable("recent") {
-            RecentActivityScreen(
-                app = vm,
-                onBack = { nav.popBackStack() },
-                onOpenChat = { id -> vm.openConversation(id) },
-                onOpenSearch = { nav.navigate("search") }
-            )
-        }
-        composable("wizard/start") {
-            WizardIntro(
-                app = vm,
-                onBegin = { nav.navigate("wizard/provider") },
-                onBack = { nav.popBackStack() }
-            )
-        }
-        composable("wizard/provider") {
-            WizardProvider(
-                app = vm,
-                onContinue = { nav.navigate("wizard/config") },
-                onBack = { nav.popBackStack("wizard/start", false) }
-            )
-        }
-        composable("wizard/config") {
-            val configScope = androidx.compose.runtime.rememberCoroutineScope()
-            WizardConfig(
-                app = vm,
-                onTest = { nav.navigate("wizard/test") },
-                onContinue = {
-                    configScope.launch {
-                        vm.wizardSaveAndFinish()
-                        nav.navigate("main") {
-                            popUpTo("main") { inclusive = true }
-                        }
-                    }
-                },
-                onBack = { nav.popBackStack() }
-            )
-        }
-        composable("wizard/test") {
-            WizardTest(
-                app = vm,
-                onDone = {
-                    nav.navigate("main") {
-                        popUpTo("main") { inclusive = true }
-                    }
-                },
-                onEditBack = { nav.popBackStack() },
-                onCancel = { nav.popBackStack() }
-            )
-        }
         composable("settings/chat") { ChatSettingsScreen(vm) { nav.popBackStack() } }
         composable("settings/voice") { VoiceSettingsScreen(vm) { nav.popBackStack() } }
         composable("settings/appearance") { AppearanceScreen(vm) { nav.popBackStack() } }
@@ -418,7 +368,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                         0 -> HomeScreen(
                             app = vm,
                             onOpenChat = { id -> vm.openConversation(id) },
-                            onSeeAll = { nav.navigate("recent") },
+                            onSeeAll = { vm.selectTab(AsterTab.CHATS) },
                             onOpenSettings = { vm.selectTab(AsterTab.SETTINGS) },
                             onOpenSearch = { nav.navigate("search") },
                             onVoice = { vm.selectTab(AsterTab.VOICE) }

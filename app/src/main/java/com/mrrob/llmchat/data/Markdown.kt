@@ -62,10 +62,12 @@ object Markdown {
                     blocks.add(MdBlock.Rule)
                 }
 
-                Regex("^#{1,6}\\s").matches(line) -> {
+                // "## Title", "##Title" and "## Title ##" all count as headings
+                Regex("^#{1,6}\\s*\\S").matches(line) -> {
                     flushPara()
                     val level = line.takeWhile { it == '#' }.length
-                    blocks.add(MdBlock.Heading(level, line.drop(level).trim()))
+                    val text = line.drop(level).trim().trimEnd('#').trim()
+                    blocks.add(MdBlock.Heading(level, text))
                 }
 
                 line.trimStart().startsWith(">") -> {

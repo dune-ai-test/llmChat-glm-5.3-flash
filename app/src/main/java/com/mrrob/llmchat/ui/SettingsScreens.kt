@@ -101,6 +101,10 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                 importReason = op.reason
                 showImportPassword = true
             }
+            is AppViewModel.DataOp.NeedSheet -> {
+                resultMessage = op.reason
+                exportLauncher.launch("aster-backup.json")
+            }
             is AppViewModel.DataOp.Done -> {
                 resultMessage = op.message
                 app.clearDataOp()

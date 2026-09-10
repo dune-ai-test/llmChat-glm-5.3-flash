@@ -629,21 +629,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Writes the staged bytes while the SAF write grant is definitely alive. */
-    /** Stores a persistable tree URI so exports never ask again. */
+    /** Stores a persistable tree URI so exports never ask again - after probing it. */
     fun setExportFolder(uri: android.net.Uri) {
-        runCatching {
-            appContext.contentResolver.takePersistableUriPermission(
-                uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            val usable = runCatching {
+                runCatching {
+                    appContext.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                    )
+                }
+                val probe = android.provider.DocumentsContract.createDocument(
+                    appContext.contentResolver, uri, "application/octet-stream", ".aster-probe.tmp"
+                ) ?: throw IllegalStateException("folder rejects new files")
+                runCatching {
+                    android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, probe)
+                }
+                true
+            }.getOrDefault(false)
+            if (usable) {
+                updateSettings { it.copy(exportFolderUri = uri.toString()) }
+                _dataOp.value = DataOp.Done("Export folder set - backups save there automatically.")
+            } else {
+                _dataOp.value = DataOp.Done(
+                    "That folder can't store files (the Downloads view can't). " +
+                        "Pick a regular folder, e.g. Documents."
+                )
+            }
         }
-        updateSettings { it.copy(exportFolderUri = uri.toString()) }
     }
 
     /** Writes the staged backup straight into the saved export folder. */
     fun writeExportToFolder() {
         val bytes = _exportBytes.value ?: return
         val treeStr = settings.value.exportFolderUri
-        _exportBytes.value = null
         if (treeStr.isBlank()) return
         val tree = android.net.Uri.parse(treeStr)
         viewModelScope.launch(Dispatchers.IO) {
@@ -653,19 +673,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val name = "aster-backup-$stamp.json"
                 val doc = android.provider.DocumentsContract.createDocument(
                     appContext.contentResolver, tree, "application/octet-stream", name
-                ) ?: throw IllegalStateException("Could not create the file in the folder.")
+                ) ?: throw IllegalStateException("folder rejected the new file")
                 appContext.contentResolver.openOutputStream(doc)?.use { out ->
                     out.write(bytes)
                     out.flush()
                 } ?: throw IllegalStateException("Could not open the file for writing.")
                 name
             }
-            _dataOp.value = DataOp.Done(
-                result.fold(
-                    { "Saved \"$it\" to your export folder (${bytes.size / 1024} KB, encrypted)." },
-                    { "Export failed: ${it.message}" }
+            if (result.isSuccess) {
+                _exportBytes.value = null
+                _dataOp.value = DataOp.Done(
+                    "Saved \"${result.getOrNull()}\" to your export folder (${bytes.size / 1024} KB, encrypted)."
                 )
-            )
+            } else {
+                // Folder unusable (e.g. Downloads tree): forget it and use the save sheet instead.
+                updateSettings { it.copy(exportFolderUri = "") }
+                _dataOp.value = DataOp.NeedSheet(
+                    "The saved folder can't store files (${result.exceptionOrNull()?.message}). " +
+                        "Choose where to save this backup instead."
+                )
+            }
         }
     }
 
@@ -729,6 +756,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         data class Running(val label: String) : DataOp()
         data class Done(val message: String) : DataOp()
         data class NeedPassword(val reason: String) : DataOp()
+        /** Folder write failed - the UI should fall back to the save-file sheet. */
+        data class NeedSheet(val reason: String) : DataOp()
     }
 
     private val _dataOp = MutableStateFlow<DataOp>(DataOp.Idle)
