@@ -95,24 +95,6 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     var importReason by remember { mutableStateOf<String?>(null) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(dataOp) {
-        when (val op = dataOp) {
-            is AppViewModel.DataOp.NeedPassword -> {
-                importReason = op.reason
-                showImportPassword = true
-            }
-            is AppViewModel.DataOp.NeedSheet -> {
-                resultMessage = op.reason
-                exportLauncher.launch("aster-backup.json")
-            }
-            is AppViewModel.DataOp.Done -> {
-                resultMessage = op.message
-                app.clearDataOp()
-            }
-            else -> Unit
-        }
-    }
-
     val exportBytes by app.exportBytes.collectAsStateWithLifecycle()
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -141,6 +123,24 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) app.setExportFolder(uri)
+    }
+
+    LaunchedEffect(dataOp) {
+        when (val op = dataOp) {
+            is AppViewModel.DataOp.NeedPassword -> {
+                importReason = op.reason
+                showImportPassword = true
+            }
+            is AppViewModel.DataOp.NeedSheet -> {
+                resultMessage = op.reason
+                exportLauncher.launch("aster-backup.json")
+            }
+            is AppViewModel.DataOp.Done -> {
+                resultMessage = op.message
+                app.clearDataOp()
+            }
+            else -> Unit
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
