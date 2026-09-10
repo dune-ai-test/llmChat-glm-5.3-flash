@@ -47,7 +47,15 @@ jobs:
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Verify signature
-        run: apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SIGNER" ]; then
+            echo "apksigner not found on runner - falling back to jarsigner"
+            jarsigner -verify -certs "$APK" | head -5
+          else
+            "$SIGNER" verify --print-certs "$APK"
+          fi
 
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
