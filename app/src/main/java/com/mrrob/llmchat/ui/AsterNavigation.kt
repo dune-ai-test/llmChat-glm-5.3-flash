@@ -38,7 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalActivity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeConsumed
 import androidx.compose.ui.draw.clip
@@ -221,8 +221,7 @@ private fun AsterNavigation(vm: AppViewModel) {
         ) { entry ->
             val id = entry.arguments?.getString("conversationId").orEmpty()
             // Scope to the activity: leaving the chat must NOT cancel generation.
-            val storeOwner = (androidx.compose.ui.platform.LocalActivity.current
-                as? androidx.lifecycle.ViewModelStoreOwner)
+            val storeOwner = (LocalContext.current as? androidx.lifecycle.ViewModelStoreOwner)
                 ?: checkNotNull(LocalViewModelStoreOwner.current)
             val chatVm: ChatViewModel = viewModel(
                 viewModelStoreOwner = storeOwner,
