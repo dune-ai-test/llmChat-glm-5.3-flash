@@ -80,7 +80,7 @@ fun HomeScreen(
             actions = {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(c.accentTint)
                         .clickable(
@@ -275,68 +275,83 @@ private fun ModelCard(
 ) {
     val c = LocalScheme.current
     val t = LocalType.current
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (dimmed) 0.7f else 1f)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(c.card)
-            .border(1.dp, c.border, RoundedCornerShape(24.dp))
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .border(1.dp, c.border, RoundedCornerShape(18.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        IconTile(
+            icon = IconsL.sparkles,
+            size = 38.dp,
+            tileRadius = 12.dp,
+            iconSize = 18.dp,
+            background = if (dimmed) c.fill else c.accentTint,
+            tint = if (dimmed) c.textMuted else c.accent
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
-            IconTile(
-                icon = IconsL.sparkles,
-                size = 46.dp,
-                tileRadius = 16.dp,
-                iconSize = 22.dp,
-                background = if (dimmed) c.fill else c.accentTint,
-                tint = if (dimmed) c.textMuted else c.accent
+            Text(
+                connection.activeModel.ifBlank { "No model selected" },
+                style = t.rowTitle.copy(fontWeight = FontWeight.SemiBold),
+                color = c.textPrimary,
+                maxLines = 1
             )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(connection.activeModel.ifBlank { "No model selected" }, style = t.heroTitle, color = c.textPrimary)
-                Text(
-                    "${providerLabel(connection.provider)} · ${connection.name}",
-                    style = t.desc,
-                    color = c.textSecondary,
-                    maxLines = 1
-                )
-            }
+            Text(
+                "${providerLabel(connection.provider)} · ${connection.name}",
+                style = t.tiny.copy(fontSize = 11.sp),
+                color = c.textMuted,
+                maxLines = 1
+            )
         }
-        if (!dimmed) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "Change Model",
-                    style = t.caption.copy(fontWeight = FontWeight.SemiBold),
-                    color = c.accent,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onChangeModel
-                    )
+        Spacer(Modifier.width(10.dp))
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(99.dp))
+                .background(if (dimmed) c.fill else c.accentTint)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onChangeModel
                 )
-                Text(
-                    "Manage Connection",
-                    style = t.caption.copy(fontWeight = FontWeight.SemiBold),
-                    color = c.textSecondary,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onManage
-                    )
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                "Change",
+                style = t.caption.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (dimmed) c.textSecondary else c.accent
                 )
-            }
+            )
+            Icon(
+                IconsL.chevronDown, null,
+                tint = if (dimmed) c.textSecondary else c.accent,
+                modifier = Modifier.size(13.dp)
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onManage
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(IconsL.settings, "Manage Connection", tint = c.textMuted, modifier = Modifier.size(17.dp))
         }
     }
 }

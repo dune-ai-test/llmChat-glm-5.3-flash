@@ -281,6 +281,9 @@ fun AsterChip(
     }
 }
 
+/** Set to a lambda by MainScaffold when navigation mode is "drawer". */
+val LocalDrawerOpener = androidx.compose.runtime.compositionLocalOf<(() -> Unit)?> { null }
+
 /** The uniform, non-scrolling top bar: large title + optional leading + actions. */
 @Composable
 fun ScreenTopBar(
@@ -290,12 +293,23 @@ fun ScreenTopBar(
     actions: (@Composable () -> Unit)? = null
 ) {
     val c = LocalScheme.current
+    val opener = LocalDrawerOpener.current
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (leading == null && opener != null) {
+            CircleIconButton(
+                icon = IconsL.menu,
+                onClick = opener,
+                size = 40.dp,
+                iconSize = 20.dp,
+                bordered = false
+            )
+            Spacer(Modifier.width(10.dp))
+        }
         if (leading != null) {
             leading()
             Spacer(Modifier.width(10.dp))

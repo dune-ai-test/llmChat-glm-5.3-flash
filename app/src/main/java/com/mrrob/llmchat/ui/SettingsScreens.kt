@@ -60,6 +60,7 @@ import com.mrrob.llmchat.ui.kit.AsterSegmented
 import com.mrrob.llmchat.ui.kit.AsterSliderRow
 import com.mrrob.llmchat.ui.kit.AsterSwitch
 import com.mrrob.llmchat.ui.kit.CardDivider
+import com.mrrob.llmchat.ui.kit.CircleIconButton
 import com.mrrob.llmchat.ui.kit.IconsL
 import com.mrrob.llmchat.ui.kit.InfoStrip
 import com.mrrob.llmchat.ui.kit.SectionLabel
@@ -107,12 +108,16 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
         }
     }
 
+    val exportBytes by app.exportBytes.collectAsStateWithLifecycle()
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
-        val pwd = pendingExportPassword
-        pendingExportPassword = ""
-        if (uri != null && pwd != null) app.exportBackup(uri, pwd)
+        if (uri != null) app.writeExportTo(uri)
+        app.consumeExportBytes()
+    }
+
+    LaunchedEffect(exportBytes) {
+        if (exportBytes != null) exportLauncher.launch("aster-backup.json")
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -167,18 +172,6 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                         )
                     }
                     Icon(IconsL.chevronRight, null, tint = c.textMuted, modifier = Modifier.size(17.dp))
-                }
-            }
-
-            // Quick theme switch
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("system" to "System", "light" to "Light", "dark" to "Dark").forEach { (key, label) ->
-                    com.mrrob.llmchat.ui.kit.AsterChip(
-                        text = label,
-                        selected = settings.themeMode == key,
-                        modifier = Modifier.weight(1f),
-                        onClick = { app.updateSettings { x -> x.copy(themeMode = key) } }
-                    )
                 }
             }
 
@@ -350,9 +343,8 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
             confirmLabel = "Export",
             onDismiss = { showExportPassword = false },
             onConfirm = { pwd ->
-                pendingExportPassword = pwd
                 showExportPassword = false
-                exportLauncher.launch("aster-backup.json")
+                app.prepareExport(pwd)
             }
         )
     }
@@ -493,9 +485,6 @@ private fun LockedField(placeholder: String, value: String, onValueChange: (Stri
     }
 }
 
-/** Scratch state between the password dialog and the SAF launcher callback. */
-private var pendingExportPassword: String? = null
-
 private val PaddingValuesZero = androidx.compose.foundation.layout.PaddingValues()
 
 private fun defaultHeaderCount(app: AppViewModel): Int {
@@ -524,7 +513,19 @@ fun ChatSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
             .verticalScroll(rememberScrollState())
             .imePadding()
     ) {
-        AsterBackHeader(title = "Chat", onBack = onBack)
+        ScreenTopBar(
+            title = "Chat",
+            leading = {
+                CircleIconButton(
+                    icon = IconsL.chevronLeft,
+                    onClick = onBack,
+                    size = 40.dp,
+                    iconSize = 20.dp,
+                    bordered = false,
+                    tint = c.textPrimary
+                )
+            }
+        )
         Column(
             modifier = Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -646,7 +647,19 @@ fun VoiceSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
-        AsterBackHeader(title = "Voice", onBack = onBack)
+        ScreenTopBar(
+            title = "Voice",
+            leading = {
+                CircleIconButton(
+                    icon = IconsL.chevronLeft,
+                    onClick = onBack,
+                    size = 40.dp,
+                    iconSize = 20.dp,
+                    bordered = false,
+                    tint = c.textPrimary
+                )
+            }
+        )
         Column(
             modifier = Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -742,9 +755,22 @@ fun AppearanceScreen(app: AppViewModel, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
     ) {
-        AsterBackHeader(title = "Appearance", onBack = onBack)
+        ScreenTopBar(
+            title = "Appearance",
+            leading = {
+                CircleIconButton(
+                    icon = IconsL.chevronLeft,
+                    onClick = onBack,
+                    size = 40.dp,
+                    iconSize = 20.dp,
+                    bordered = false,
+                    tint = c.textPrimary
+                )
+            }
+        )
         Column(
             modifier = Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -925,7 +951,19 @@ fun AdvancedApiScreen(app: AppViewModel, onBack: () -> Unit) {
             .verticalScroll(rememberScrollState())
             .imePadding()
     ) {
-        AsterBackHeader(title = "Advanced", onBack = onBack)
+        ScreenTopBar(
+            title = "Advanced",
+            leading = {
+                CircleIconButton(
+                    icon = IconsL.chevronLeft,
+                    onClick = onBack,
+                    size = 40.dp,
+                    iconSize = 20.dp,
+                    bordered = false,
+                    tint = c.textPrimary
+                )
+            }
+        )
         Column(
             modifier = Modifier.padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)

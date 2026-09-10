@@ -16,6 +16,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -65,6 +67,24 @@ import kotlinx.coroutines.launch
 @Composable
 fun AsterRoot(app: AsterApp) {
     val settings by app.container.settingsStore.settings.collectAsStateWithLifecycle()
+
+    // Make the status/navigation bar icons follow the app's chosen mode.
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val appDark = when (settings.themeMode) {
+        "light" -> false
+        "dark" -> true
+        else -> systemDark
+    }
+    val view = androidx.compose.ui.platform.LocalView.current
+    val window = (view.context as? android.app.Activity)?.window
+    androidx.compose.runtime.SideEffect {
+        window?.let { w ->
+            val controller = androidx.core.view.WindowCompat.getInsetsController(w, view)
+            controller.isAppearanceLightStatusBars = !appDark
+            controller.isAppearanceLightNavigationBars = !appDark
+        }
+    }
+
     AsterTheme(
         themeMode = settings.themeMode,
         fontScaleValue = settings.fontScale,
@@ -278,8 +298,10 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
     val tab by vm.tab.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val c = LocalScheme.current
-    val side = settings.navMode == "side"
+    val drawerMode = settings.navMode == "side"
     val pager = rememberPagerState(initialPage = tab.ordinal) { AsterTab.entries.size }
+    val drawerState = androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Closed)
+    val uiScope = rememberCoroutineScope()
 
     // Settings selection drives the pager...
     LaunchedEffect(tab) {
@@ -293,26 +315,44 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
         }
     }
 
-    Row(modifier = Modifier.fillMaxSize().background(c.bg)) {
-        if (side) {
-            AsterSideRail(selected = tab, onSelect = { vm.selectTab(it) })
-        }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
+    val drawerOpener: (() -> Unit)? =
+        if (drawerMode) { { uiScope.launch { drawerState.open() } } } else null
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.mrrob.llmchat.ui.kit.LocalDrawerOpener provides drawerOpener
         ) {
+            androidx.compose.material3.ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    if (drawerMode) {
+                        AsterDrawer(
+                            selected = tab,
+                            onSelect = { target ->
+                                vm.selectTab(target)
+                                uiScope.launch { drawerState.close() }
+                            }
+                        )
+                    }
+                }
+            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
                 beyondViewportPageCount = 1
             ) { page ->
-                val isVoice = page == AsterTab.VOICE.ordinal
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .statusBarsPadding()
-                        .padding(bottom = if (isVoice || side) 0.dp else 84.dp)
+                        .then(
+                            if (drawerMode) Modifier.navigationBarsPadding().padding(bottom = 12.dp)
+                            else Modifier.padding(bottom = 84.dp)
+                        )
                 ) {
                     when (page) {
                         0 -> HomeScreen(
@@ -343,20 +383,22 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
-            if (!side) {
+            if (!drawerMode) {
                 FloatingTabBar(
                     selected = tab,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     onSelect = { vm.selectTab(it) }
                 )
             }
-        }
+            }  // Box
+            }  // ModalNavigationDrawer content
+        }  // provider
     }
 }
 
-/** Material-style vertical rail: floating card of tab icons, left of content. */
+/** The navigation drawer shown when Appearance > Navigation = "Sidebar". */
 @Composable
-private fun AsterSideRail(
+private fun AsterDrawer(
     selected: AsterTab,
     onSelect: (AsterTab) -> Unit
 ) {
@@ -369,142 +411,67 @@ private fun AsterSideRail(
         AsterTab.CONNECTIONS to ("APIs" to IconsL.server),
         AsterTab.SETTINGS to ("Settings" to IconsL.settings)
     )
-    Column(
-        modifier = Modifier
-            .fillMaxHeight()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(start = 10.dp, end = 2.dp, top = 12.dp, bottom = 12.dp)
-    ) {
+    androidx.compose.material3.ModalDrawerSheet(modifier = Modifier.width(288.dp)) {
         Column(
             modifier = Modifier
-                .width(84.dp)
-                .fillMaxHeight()
-                .shadow(12.dp, RoundedCornerShape(26.dp))
-                .clip(RoundedCornerShape(26.dp))
-                .background(c.card)
-                .padding(vertical = 14.dp, horizontal = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(bottom = 8.dp)
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(c.accentTint),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(start = 4.dp, top = 18.dp, bottom = 20.dp)
             ) {
-                Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(c.accentTint),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(20.dp))
+                }
+                Column {
+                    Text("Aster", style = t.cardTitle, color = c.textPrimary)
+                    Text("Your AI workspace", style = t.tiny, color = c.textMuted)
+                }
             }
             items.forEach { (item, pair) ->
                 val isSel = item == selected
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .padding(vertical = 2.dp)
+                        .clip(RoundedCornerShape(14.dp))
                         .background(if (isSel) c.accentTint else Color.Transparent)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
                         ) { onSelect(item) }
-                        .padding(vertical = 9.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Icon(
                         pair.second, pair.first,
-                        tint = if (isSel) c.accent else c.textMuted,
+                        tint = if (isSel) c.accent else c.textSecondary,
                         modifier = Modifier.size(22.dp)
                     )
                     Text(
                         pair.first,
-                        style = t.tiny.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Medium),
-                        color = if (isSel) c.accent else c.textMuted,
-                        maxLines = 1
+                        style = t.rowTitle.copy(fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal),
+                        color = if (isSel) c.accent else c.textPrimary
                     )
                 }
             }
-        }
-    }
-}
-
-/** Floating pill-shaped bottom navigation bar (the default tab surface). */
-@Composable
-private fun FloatingTabBar(
-    selected: AsterTab,
-    modifier: Modifier = Modifier,
-    onSelect: (AsterTab) -> Unit
-) {
-    val c = LocalScheme.current
-    val tabs = listOf(
-        AsterTab.HOME to ("Home" to IconsL.home),
-        AsterTab.CHATS to ("Chats" to IconsL.chatBubble),
-        AsterTab.VOICE to ("Voice" to IconsL.mic),
-        AsterTab.CONNECTIONS to ("APIs" to IconsL.server),
-        AsterTab.SETTINGS to ("Settings" to IconsL.settings)
-    )
-    Box(
-        modifier = modifier
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(12.dp, RoundedCornerShape(30.dp))
-                .clip(RoundedCornerShape(30.dp))
-                .background(c.card.copy(alpha = 0.94f))
-                .padding(6.dp),
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            tabs.forEach { (item, pair) ->
-                TabItem(
-                    label = pair.first,
-                    icon = pair.second,
-                    selected = item == selected,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onSelect(item) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TabItem(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val c = LocalScheme.current
-    val t = LocalType.current
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(if (selected) c.accentTint else Color.Transparent)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Version 1.2.0",
+                style = t.tiny,
+                color = c.textMuted,
+                modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
             )
-            .padding(vertical = 9.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Icon(
-            icon, label,
-            tint = if (selected) c.accent else c.textMuted,
-            modifier = Modifier.size(22.dp)
-        )
-        Text(
-            label,
-            style = t.tiny.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp),
-            color = if (selected) c.accent else c.textMuted,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Clip
-        )
+        }
     }
 }
 

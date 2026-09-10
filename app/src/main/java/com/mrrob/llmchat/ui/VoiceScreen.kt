@@ -212,7 +212,6 @@ fun VoiceScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
-            .navigationBarsPadding()
     ) {
         LaunchedEffect(pendingVoice) {
             pendingVoice?.let { id ->

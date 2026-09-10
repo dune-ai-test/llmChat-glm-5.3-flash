@@ -609,39 +609,67 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun importData(raw: String): AppRepository.ImportResult = repo.importJson(raw)
 
-    /** Encrypts the workspace with the vault format and writes it to [uri]. */
-    fun exportBackup(uri: android.net.Uri, password: String) {
+    /** Encrypted backup bytes staged for the SAF document launcher. */
+    private val _exportBytes = MutableStateFlow<ByteArray?>(null)
+    val exportBytes: StateFlow<ByteArray?> = _exportBytes.asStateFlow()
+    fun consumeExportBytes() { _exportBytes.value = null }
+
+    fun prepareExport(password: String) {
         viewModelScope.launch {
-            _dataOp.value = DataOp.Running("Exporting…")
+            _dataOp.value = DataOp.Running("Encrypting\u2026")
             try {
                 val json = repo.exportJson()
                 val bytes = com.mrrob.llmchat.data.Vault.encrypt(json, password)
-                withContext(Dispatchers.IO) {
-                    appContext.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                        ?: throw IllegalStateException("Could not open the file.")
-                }
-                _dataOp.value = DataOp.Done("Backup exported (${bytes.size / 1024} KB, encrypted).")
+                _dataOp.value = DataOp.Idle
+                _exportBytes.value = bytes
             } catch (e: Exception) {
                 _dataOp.value = DataOp.Done("Export failed: ${e.message}")
             }
         }
     }
 
+    /** Writes the staged bytes while the SAF write grant is definitely alive. */
+    fun writeExportTo(uri: android.net.Uri) {
+        val bytes = _exportBytes.value ?: return
+        runCatching {
+            appContext.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        val result = runCatching {
+            appContext.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(bytes)
+                out.flush()
+            } ?: throw IllegalStateException("Could not open the file for writing.")
+        }
+        viewModelScope.launch {
+            _dataOp.value = if (result.isSuccess) {
+                DataOp.Done("Backup exported (${bytes.size / 1024} KB, encrypted).")
+            } else {
+                DataOp.Done("Export failed: ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
+
     /** Reads a backup; asks the UI for a password when the file is a vault. */
     fun importBackup(uri: android.net.Uri, password: String) {
-        viewModelScope.launch {
-            _dataOp.value = DataOp.Running("Importing…")
+        runCatching {
+            appContext.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _dataOp.value = DataOp.Running("Importing\u2026")
             try {
-                val bytes = withContext(Dispatchers.IO) {
-                    appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: throw IllegalStateException("Could not read the file.")
-                }
+                val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("Could not read the file.")
                 val json = if (com.mrrob.llmchat.data.Vault.isVault(bytes)) {
                     com.mrrob.llmchat.data.Vault.decrypt(bytes, password)
                 } else {
                     String(bytes, Charsets.UTF_8)
                 }
-                _dataOp.value = when (val r = repo.importJson(json)) {
+                val r = repo.importJson(json)
+                _dataOp.value = when (r) {
                     is AppRepository.ImportResult.Success -> DataOp.Done(
                         "Imported ${r.conversations} conversation${if (r.conversations == 1) "" else "s"}" +
                             if (r.connections > 0) " and ${r.connections} connection${if (r.connections == 1) "" else "s"}." else "."
