@@ -493,6 +493,244 @@ private fun LockedField(placeholder: String, value: String, onValueChange: (Stri
     }
 }
 
+/** Scratch state between the password dialog and the SAF launcher callback. */
+private var pendingExportPassword: String? = null
+
+private val PaddingValuesZero = androidx.compose.foundation.layout.PaddingValues()
+
+private fun defaultHeaderCount(app: AppViewModel): Int {
+    val conn = app.connections.value.firstOrNull { it.isDefault } ?: return 0
+    return app.repo.customHeadersOf(conn).size
+}
+
+private fun formatTemp(v: Float): String =
+    if (v == v.toInt().toFloat()) "${v.toInt()}.0" else v.toString().take(3)
+
+// ── 28 Chat settings ──────────────────────────────────────────────────────────
+
+@Composable
+fun ChatSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val c = LocalScheme.current
+    val t = LocalType.current
+    var promptDialog by remember { mutableStateOf(false) }
+    var maxTokensDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+    ) {
+        AsterBackHeader(title = "Chat", onBack = onBack)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionLabel("Generation")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(
+                    label = "Streaming",
+                    trailing = { AsterSwitch(checked = settings.streaming) { app.updateSettings { s -> s.copy(streaming = it) } } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "System prompt",
+                    value = settings.promptPreset.replaceFirstChar { it.uppercase() },
+                    showChevron = true,
+                    onClick = { promptDialog = true }
+                )
+            }
+            SectionLabel("Parameters")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterSliderRow(
+                    label = "Temperature",
+                    value = settings.temperature,
+                    range = 0f..2f,
+                    valueText = formatTemp(settings.temperature),
+                    onValueChange = { v -> app.updateSettings { it.copy(temperature = (v * 10).toInt() / 10f) } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Maximum tokens",
+                    value = "${settings.maxTokens}",
+                    showChevron = true,
+                    onClick = { maxTokensDialog = true }
+                )
+                CardDivider()
+                AsterRow(label = "Context length", value = "Provider-determined", showChevron = false)
+            }
+
+            // Preset chips + custom prompt (28)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("concise", "detailed", "code-first", "custom").forEach { preset ->
+                    com.mrrob.llmchat.ui.kit.AsterChip(
+                        text = preset.replaceFirstChar { it.uppercase() },
+                        selected = settings.promptPreset == preset,
+                        onClick = {
+                            app.updateSettings { s ->
+                                s.copy(
+                                    promptPreset = preset,
+                                    systemPrompt = when (preset) {
+                                        "concise" -> AppSettings.PRESET_CONCISE
+                                        "detailed" -> AppSettings.PRESET_DETAILED
+                                        "code-first" -> AppSettings.PRESET_CODE_FIRST
+                                        else -> s.systemPrompt
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+
+            AsterCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+                Text(
+                    "CUSTOM INSTRUCTIONS",
+                    style = t.tiny.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
+                    color = c.textMuted
+                )
+                Spacer(Modifier.height(8.dp))
+                BasicTextField(
+                    value = settings.systemPrompt,
+                    onValueChange = { v -> app.updateSettings { it.copy(systemPrompt = v, promptPreset = "custom") } },
+                    textStyle = t.body.copy(color = c.textPrimary),
+                    cursorBrush = SolidColor(c.accent),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (promptDialog) {
+        EditTextDialog(
+            title = "Default system prompt",
+            value = settings.systemPrompt,
+            multiline = true,
+            onDismiss = { promptDialog = false },
+            onSave = { text ->
+                app.updateSettings { s -> s.copy(systemPrompt = text, promptPreset = "custom") }
+                promptDialog = false
+            }
+        )
+    }
+    if (maxTokensDialog) {
+        NumberDialog(
+            title = "Maximum tokens",
+            value = settings.maxTokens.toString(),
+            onDismiss = { maxTokensDialog = false },
+            onSave = { v ->
+                v.toIntOrNull()?.coerceIn(1, 200000)?.let { app.updateSettings { s -> s.copy(maxTokens = it) } }
+                maxTokensDialog = false
+            }
+        )
+    }
+}
+
+// ── 29 Voice settings ─────────────────────────────────────────────────────────
+
+@Composable
+fun VoiceSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
+    val settings by app.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val c = LocalScheme.current
+    val t = LocalType.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .statusBarsPadding()
+            .verticalScroll(rememberScrollState())
+    ) {
+        AsterBackHeader(title = "Voice", onBack = onBack)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            SectionLabel("Speech")
+            AsterCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 13.dp)) {
+                AsterRow(label = "Speech-to-text")
+                AsterSegmented(
+                    options = listOf("On-device", "Cloud"),
+                    selectedIndex = 0,
+                    onSelect = { idx ->
+                        // Cloud STT is not implemented on-device; selection is cosmetic.
+                        if (idx == 0) Unit
+                    }
+                )
+            }
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(
+                    label = "Text-to-speech",
+                    trailing = { AsterSwitch(checked = settings.voiceTts) { app.updateSettings { s -> s.copy(voiceTts = it) } } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Interrupt on speech",
+                    trailing = { AsterSwitch(checked = settings.interruptOnSpeech) { app.updateSettings { s -> s.copy(interruptOnSpeech = it) } } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Continuous conversation",
+                    trailing = { AsterSwitch(checked = settings.continuousVoice) { app.updateSettings { s -> s.copy(continuousVoice = it) } } }
+                )
+            }
+            SectionLabel("Voice")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterRow(
+                    label = settings.voiceName.split(" · ").firstOrNull().orEmpty().ifBlank { "Aria" },
+                    description = settings.voiceName,
+                    onClick = {
+                        val names = listOf("Aria · Warm", "Fenrir · Calm", "Clyde · Neutral")
+                        val idx = names.indexOf(settings.voiceName)
+                        app.updateSettings { s -> s.copy(voiceName = names[(idx + 1) % names.size]) }
+                    },
+                    trailing = {
+                        Box(
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(c.fill)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    com.mrrob.llmchat.speech.TtsPlayer(context).speak(
+                                        "Hello, I'm ${settings.voiceName.split(" · ").firstOrNull() ?: "Aria"}. This is how I'll sound."
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(IconsL.play, "Preview voice", tint = c.textSecondary, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                )
+            }
+            SectionLabel("Tuning")
+            AsterCard(contentPadding = PaddingValuesZero) {
+                AsterSliderRow(
+                    label = "Speaking rate",
+                    value = settings.speakingRate,
+                    range = 0.5f..2f,
+                    valueText = "${(settings.speakingRate * 10).toInt() / 10f}x",
+                    onValueChange = { v -> app.updateSettings { it.copy(speakingRate = (v * 10).toInt() / 10f) } }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Auto-play responses",
+                    trailing = { AsterSwitch(checked = settings.voiceAutoPlay) { app.updateSettings { s -> s.copy(voiceAutoPlay = it) } } }
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+
 /** 30 — Appearance: theme, colour accent, navigation style, font size, density. */
 @Composable
 fun AppearanceScreen(app: AppViewModel, onBack: () -> Unit) {
