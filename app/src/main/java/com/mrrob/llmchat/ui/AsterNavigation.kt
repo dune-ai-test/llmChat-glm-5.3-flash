@@ -429,6 +429,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
 }
 
 /** The navigation drawer shown when Appearance > Navigation = "Sidebar". */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun AsterDrawer(
     selected: AsterTab,
