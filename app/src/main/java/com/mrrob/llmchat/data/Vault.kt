@@ -11,7 +11,7 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Aster's small self-contained backup encryption format ("ASTV1"):
  *
- *   "ASTV1" | salt(16) | iv(12) | aes-cbc ciphertext | hmac-sha256(32)
+ *   "ASTV1" | salt(16) | iv(16) | aes-cbc ciphertext | hmac-sha256(32)
  *
  * A password is stretched with PBKDF2-HMAC-SHA256 into 64 bytes: a 32-byte
  * AES key and a 32-byte MAC key. Encrypt-then-MAC, so a wrong password (or a
@@ -22,7 +22,7 @@ object Vault {
 
     private const val MAGIC = "ASTV1"
     private const val SALT_LEN = 16
-    private const val IV_LEN = 12
+    private const val IV_LEN = 16
     private const val MAC_LEN = 32
     private const val ITERATIONS = 120_000
 

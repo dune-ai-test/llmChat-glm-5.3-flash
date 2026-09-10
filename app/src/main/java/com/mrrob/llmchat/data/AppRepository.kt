@@ -278,7 +278,7 @@ class AppRepository(
     fun wireMessages(messages: List<MessageEntity>, limit: Int = 40): List<WireMessage> =
         messages.filter { (it.role == "user" || it.role == "assistant") && it.text.isNotBlank() }
             .takeLast(limit)
-            .map { WireMessage(it.role, it.text) }
+            .map { WireMessage(it.role, it.text, ImageAttachments.parseList(it.images)) }
 
     // ── Titles ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +354,36 @@ class AppRepository(
             convs.put(obj)
         }
         out.put("conversations", convs)
+        val st = settingsStore.settings.value
+        out.put("settings", JSONObject().apply {
+            put("themeMode", st.themeMode)
+            put("accentTheme", st.accentTheme)
+            put("fontScale", st.fontScale)
+            put("chatDensity", st.chatDensity)
+            put("navMode", st.navMode)
+            put("displayName", st.displayName)
+            put("voiceName", st.voiceName)
+            put("favoriteModels", st.favoriteModels)
+            put("streaming", st.streaming)
+            put("temperature", st.temperature.toDouble())
+            put("maxTokens", st.maxTokens)
+            put("systemPrompt", st.systemPrompt)
+            put("promptPreset", st.promptPreset)
+            put("enterToSend", st.enterToSend)
+            put("autoTitle", st.autoTitle)
+            put("autoScroll", st.autoScroll)
+            put("codeLineNumbers", st.codeLineNumbers)
+            put("voiceTts", st.voiceTts)
+            put("voiceAutoPlay", st.voiceAutoPlay)
+            put("continuousVoice", st.continuousVoice)
+            put("interruptOnSpeech", st.interruptOnSpeech)
+            put("speakingRate", st.speakingRate.toDouble())
+            put("requestTimeoutSec", st.requestTimeoutSec)
+            put("endpointPath", st.endpointPath)
+            put("apiVersion", st.apiVersion)
+            put("rawParams", st.rawParams)
+            put("debugLogging", st.debugLogging)
+        })
         return out.toString(2)
     }
 
@@ -408,6 +438,7 @@ class AppRepository(
                 model = c.optString("model"),
                 systemPrompt = c.optString("systemPrompt"),
                 kind = c.optString("kind", "TEXT"),
+                voice = c.optString("kind", "TEXT") == "VOICE",
                 lastPreview = messages.optJSONObject(messages.length() - 1)
                     ?.optString("text")?.take(80).orEmpty()
             )
@@ -426,6 +457,39 @@ class AppRepository(
                 )
             }
             imported++
+        }
+        root.optJSONObject("settings")?.let { o ->
+            settingsStore.update { x ->
+                x.copy(
+                    themeMode = o.optString("themeMode", x.themeMode),
+                    accentTheme = o.optString("accentTheme", x.accentTheme),
+                    fontScale = o.optString("fontScale", x.fontScale),
+                    chatDensity = o.optString("chatDensity", x.chatDensity),
+                    navMode = o.optString("navMode", x.navMode),
+                    displayName = o.optString("displayName", x.displayName),
+                    voiceName = o.optString("voiceName", x.voiceName),
+                    favoriteModels = o.optString("favoriteModels", x.favoriteModels),
+                    streaming = o.optBoolean("streaming", x.streaming),
+                    temperature = o.optDouble("temperature", x.temperature.toDouble()).toFloat(),
+                    maxTokens = o.optInt("maxTokens", x.maxTokens),
+                    systemPrompt = o.optString("systemPrompt", x.systemPrompt),
+                    promptPreset = o.optString("promptPreset", x.promptPreset),
+                    enterToSend = o.optBoolean("enterToSend", x.enterToSend),
+                    autoTitle = o.optBoolean("autoTitle", x.autoTitle),
+                    autoScroll = o.optBoolean("autoScroll", x.autoScroll),
+                    codeLineNumbers = o.optBoolean("codeLineNumbers", x.codeLineNumbers),
+                    voiceTts = o.optBoolean("voiceTts", x.voiceTts),
+                    voiceAutoPlay = o.optBoolean("voiceAutoPlay", x.voiceAutoPlay),
+                    continuousVoice = o.optBoolean("continuousVoice", x.continuousVoice),
+                    interruptOnSpeech = o.optBoolean("interruptOnSpeech", x.interruptOnSpeech),
+                    speakingRate = o.optDouble("speakingRate", x.speakingRate.toDouble()).toFloat(),
+                    requestTimeoutSec = o.optInt("requestTimeoutSec", x.requestTimeoutSec),
+                    endpointPath = o.optString("endpointPath", x.endpointPath),
+                    apiVersion = o.optString("apiVersion", x.apiVersion),
+                    rawParams = o.optString("rawParams", x.rawParams),
+                    debugLogging = o.optBoolean("debugLogging", x.debugLogging)
+                )
+            }
         }
         return if (imported == 0 && connsImported == 0) {
             ImportResult.Failure("The file contained no importable conversations or connections.")

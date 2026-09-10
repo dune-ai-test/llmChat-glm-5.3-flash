@@ -20,8 +20,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** One message in the wire format (OpenAI chat style). */
-data class WireMessage(val role: String, val content: String)
+/** One message in the wire format (OpenAI chat style). [images] are local attachment paths. */
+data class WireMessage(
+    val role: String,
+    val content: String,
+    val images: List<String> = emptyList()
+)
 
 /** A connection with its secret resolved, ready to be used by [LlmClient]. */
 data class ResolvedApi(
@@ -111,7 +115,29 @@ class LlmClient(private val settings: SettingsStore) {
         payload.put("messages", JSONArray().apply {
             val system = systemPrompt?.takeIf { it.isNotBlank() } ?: s.systemPrompt.takeIf { it.isNotBlank() }
             if (system != null) put(JSONObject().put("role", "system").put("content", system))
-            messages.forEach { m -> put(JSONObject().put("role", m.role).put("content", m.content)) }
+            messages.forEach { m ->
+                val msg = JSONObject().put("role", m.role)
+                if (m.images.isEmpty()) {
+                    msg.put("content", m.content)
+                } else {
+                    val parts = JSONArray()
+                    if (m.content.isNotBlank()) {
+                        parts.put(JSONObject().put("type", "text").put("text", m.content))
+                    }
+                    m.images.forEach { path ->
+                        val url = ImageAttachments.dataUrl(path)
+                        if (url != null) {
+                            parts.put(
+                                JSONObject()
+                                    .put("type", "image_url")
+                                    .put("image_url", JSONObject().put("url", url))
+                            )
+                        }
+                    }
+                    msg.put("content", parts)
+                }
+                put(msg)
+            }
         })
         payload.put("stream", stream)
         if (s.temperature >= 0) payload.put("temperature", s.temperature.toDouble())

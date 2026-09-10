@@ -95,6 +95,8 @@ fun VoiceScreen(
 
     var showTranscript by remember { mutableStateOf(false) }
     var showModelSheet by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var voiceDetailsId by remember { mutableStateOf<Long?>(null) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var sessionActive by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(false) }
 
@@ -233,7 +235,7 @@ fun VoiceScreen(
         }
         // ── Top bar (matches Home / Chats / Connections placement) ─────────────
         ScreenTopBar(
-            title = "Voice",
+            title = conversation?.title?.ifBlank { "Voice" } ?: "Voice",
             actions = {
                 Row(
                     modifier = Modifier
@@ -274,7 +276,21 @@ fun VoiceScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(transcript, key = { it.id }) { message ->
-                    VoiceBubble(message)
+                    VoiceBubble(
+                        message = message,
+                        expanded = voiceDetailsId == message.id,
+                        onToggle = {
+                            voiceDetailsId = if (voiceDetailsId == message.id) null else message.id
+                        },
+                        onCopy = {
+                            clipboard.setText(
+                                androidx.compose.ui.text.AnnotatedString(
+                                    com.mrrob.llmchat.data.Markdown.toPlainText(message.text)
+                                )
+                            )
+                        },
+                        onRegenerate = { vm.regenerate(message) }
+                    )
                 }
                 if (phase == VoiceViewModel.Phase.LISTENING && partial.isNotBlank()) {
                     item { VoiceUserLive(partial) }
@@ -495,7 +511,13 @@ private fun ModelChip(model: String, onClick: () -> Unit) {
 // ── Pieces ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun VoiceBubble(message: MessageEntity) {
+private fun VoiceBubble(
+    message: MessageEntity,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onCopy: () -> Unit,
+    onRegenerate: () -> Unit
+) {
     val c = LocalScheme.current
     val t = LocalType.current
     if (message.role == "user") {
@@ -512,18 +534,51 @@ private fun VoiceBubble(message: MessageEntity) {
             )
         }
     } else if (message.role == "assistant") {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-            Text(
-                message.text,
-                style = t.bodyTight,
-                color = c.textPrimary,
-                modifier = Modifier
-                    .widthIn(max = 235.dp)
-                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
-                    .background(c.card)
-                    .border(1.dp, c.border, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
-                    .padding(horizontal = 15.dp, vertical = 11.dp)
-            )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                Text(
+                    message.text,
+                    style = t.bodyTight,
+                    color = c.textPrimary,
+                    modifier = Modifier
+                        .widthIn(max = 235.dp)
+                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
+                        .background(c.card)
+                        .border(1.dp, c.border, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onToggle
+                        )
+                        .padding(horizontal = 15.dp, vertical = 11.dp)
+                )
+            }
+            if (expanded) {
+                val parts = buildList {
+                    if (message.tokensIn >= 0) add("${message.tokensIn} in")
+                    if (message.tokensOut >= 0) add("${message.tokensOut} out")
+                    if (message.latencyMs > 0) add("%.1fs".format(message.latencyMs / 1000f))
+                    if (message.tokensOut > 0 && message.latencyMs > 0) {
+                        add("%.1f tok/s".format(message.tokensOut * 1000f / message.latencyMs))
+                    }
+                    if (message.model.isNotBlank()) add(message.model)
+                }
+                Column(
+                    modifier = Modifier.padding(start = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (parts.isNotEmpty()) {
+                        Text(parts.joinToString("  \u00b7  "), style = t.tiny, color = c.textMuted)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        com.mrrob.llmchat.ui.kit.AsterChip(text = "Copy", onClick = onCopy)
+                        com.mrrob.llmchat.ui.kit.AsterChip(text = "Regenerate", onClick = onRegenerate)
+                    }
+                }
+            }
         }
     } else {
         Text(message.text, style = t.tiny, color = c.textMuted, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)

@@ -60,6 +60,21 @@ class ChatViewModel(
     fun isGeneratingNow(): Boolean = _generating.value
     fun showCodeLineNumbers(): Boolean = app.settings.value.codeLineNumbers
 
+    private val _pendingImages = MutableStateFlow<List<String>>(emptyList())
+    val pendingImages: StateFlow<List<String>> = _pendingImages.asStateFlow()
+
+    fun addImage(uri: android.net.Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val path = com.mrrob.llmchat.data.ImageAttachments.save(app.appContext, uri) ?: return@launch
+            _pendingImages.update { it + path }
+        }
+    }
+
+    fun removeImage(path: String) {
+        _pendingImages.update { it - path }
+        runCatching { java.io.File(path).delete() }
+    }
+
     private var draftJob: Job? = null
     fun saveDraftDebounce(text: String) {
         draftJob?.cancel()
@@ -125,7 +140,8 @@ class ChatViewModel(
 
     fun send(text: String) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        val images = _pendingImages.value
+        if (trimmed.isEmpty() && images.isEmpty()) return
         val conv = _conversation.value ?: return
         val connection = activeConnection()
         if (connection == null) {
@@ -143,11 +159,13 @@ class ChatViewModel(
                 conversationId = conv.id,
                 role = "user",
                 text = trimmed,
-                status = if (offline) "QUEUED" else "OK"
+                status = if (offline) "QUEUED" else "OK",
+                images = com.mrrob.llmchat.data.ImageAttachments.toJson(images)
             )
             val id = repo.insertMessage(userMsg)
-            repo.touchConversation(conv.id, trimmed.take(80))
+            repo.touchConversation(conv.id, (trimmed.ifBlank { "Photo" }).take(80))
             repo.setDraft(conv.id, "")
+            _pendingImages.value = emptyList()
             if (offline) return@launch // the app-level queue flushes on reconnect
             generateFor(userMessageId = id, connection = connection)
         }

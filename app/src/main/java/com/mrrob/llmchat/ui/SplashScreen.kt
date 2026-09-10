@@ -97,6 +97,6 @@ fun SplashScreen(onFinished: () -> Unit) {
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text("Version 1.2.0", style = t.caption, color = c.textMuted)
+        Text("Version " + com.mrrob.llmchat.BuildConfig.VERSION_NAME, style = t.caption, color = c.textMuted)
     }
 }

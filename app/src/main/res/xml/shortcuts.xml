@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_chat"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/sc_new_chat">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.mrrob.llmchat"
+            android:targetClass="com.mrrob.llmchat.MainActivity">
+            <extra android:name="aster_action" android:value="new_chat" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="voice_chat"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/sc_voice">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.mrrob.llmchat"
+            android:targetClass="com.mrrob.llmchat.MainActivity">
+            <extra android:name="aster_action" android:value="voice" />
+        </intent>
+    </shortcut>
+</shortcuts>

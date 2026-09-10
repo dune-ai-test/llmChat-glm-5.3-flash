@@ -65,6 +65,46 @@ class VoiceViewModel(private val app: AppViewModel) : ViewModel() {
         }
     }
 
+    /** Re-generate an assistant voice reply from the history before it. */
+    fun regenerate(message: MessageEntity) {
+        viewModelScope.launch {
+            val conv = _conversation.value ?: return@launch
+            val connection = conv.connectionId.let { repo().connection(it) }
+                ?: connection()
+                ?: return@launch
+            _phase.value = Phase.PROCESSING
+            val wire = repo().wireMessages(repo().messagesOf(conv.id).filterNot { it.id == message.id })
+            try {
+                val result = app.client.complete(
+                    repo().resolveApi(connection),
+                    message.model.ifBlank { conv.model.ifBlank { connection.activeModel } },
+                    wire,
+                    conv.systemPrompt
+                )
+                repo().updateMessage(
+                    message.copy(
+                        text = result.text,
+                        latencyMs = result.latencyMs,
+                        tokensIn = result.tokensIn,
+                        tokensOut = result.tokensOut
+                    )
+                )
+                reloadTranscript(conv.id)
+                _phase.value = Phase.SPEAKING
+                onSpeakFinished = { _phase.value = Phase.READY }
+            } catch (e: com.mrrob.llmchat.data.ApiError) {
+                _error.value = e
+                _phase.value = Phase.READY
+            } catch (e: Exception) {
+                _error.value = com.mrrob.llmchat.data.ApiError(
+                    com.mrrob.llmchat.data.ApiErrorKind.NETWORK,
+                    e.message ?: "Something went wrong."
+                )
+                _phase.value = Phase.READY
+            }
+        }
+    }
+
     fun setPhase(phase: Phase) {
         if (phase == Phase.LISTENING) _partial.value = ""
         _phase.value = phase

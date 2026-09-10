@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Aster</string>
+    <string name="sc_new_chat">New Chat</string>
+    <string name="sc_voice">Voice Chat</string>
+    <string name="widget_label">Aster quick start</string>
 </resources>

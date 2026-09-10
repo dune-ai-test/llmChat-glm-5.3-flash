@@ -83,7 +83,9 @@ data class MessageEntity(
     val latencyMs: Long = 0,
     val tokensIn: Int = -1,
     val tokensOut: Int = -1,
-    val rating: Int = 0
+    val rating: Int = 0,
+    /** JSON array of local attachment file paths (images). */
+    val images: String = ""
 )
 
 // ── DAOs ─────────────────────────────────────────────────────────────────────
@@ -182,11 +184,25 @@ interface MessageDao {
 
 @Database(
     entities = [ConnectionEntity::class, ConversationEntity::class, MessageEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AsterDatabase : RoomDatabase() {
     abstract fun connections(): ConnectionDao
     abstract fun conversations(): ConversationDao
     abstract fun messages(): MessageDao
+
+    companion object {
+        private val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN images TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        fun build(context: android.content.Context): AsterDatabase =
+            androidx.room.Room.databaseBuilder(context, AsterDatabase::class.java, "aster.db")
+                .addMigrations(MIGRATION_1_2)
+                .fallbackToDestructiveMigration()
+                .build()
+    }
 }

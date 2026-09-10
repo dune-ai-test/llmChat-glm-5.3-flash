@@ -1,7 +1,6 @@
 package com.mrrob.llmchat
 
 import android.app.Application
-import androidx.room.Room
 import com.mrrob.llmchat.data.AppRepository
 import com.mrrob.llmchat.data.AsterDatabase
 import com.mrrob.llmchat.data.ConnectivityMonitor
@@ -13,9 +12,7 @@ import com.mrrob.llmchat.data.SettingsStore
 class AppContainer(context: Application) {
     val settingsStore = SettingsStore(context)
     val debugLog = DebugLog()
-    val database: AsterDatabase = Room.databaseBuilder(context, AsterDatabase::class.java, "aster.db")
-        .fallbackToDestructiveMigration()
-        .build()
+    val database: AsterDatabase = AsterDatabase.build(context)
     val client = LlmClient(settingsStore)
     val repository = AppRepository(database, settingsStore, client)
     val connectivity = ConnectivityMonitor(context)

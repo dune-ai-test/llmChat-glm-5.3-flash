@@ -352,20 +352,24 @@ fun ScreenTopBar(
         if (actions != null) actions()
     }
     if (elevated) {
+        if (!c.dark) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(0.7.dp)
+                    .background(c.border)
+            )
+        }
         Box(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 0.dp)
-                .height(0.7.dp)
-                .background(c.border)
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(10.dp)
+                .height(12.dp)
                 .background(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(Color(0x14000000), Color(0x00000000))
+                        listOf(
+                            if (c.dark) Color(0x2E000000) else Color(0x14000000),
+                            Color(0x00000000)
+                        )
                     )
                 )
         )

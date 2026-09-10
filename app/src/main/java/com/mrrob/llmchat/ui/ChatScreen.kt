@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -113,7 +114,15 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     var input by rememberSaveable { mutableStateOf("") }
     var detailsFor by remember { mutableStateOf<Long?>(null) }
+    var visibleCount by rememberSaveable { mutableStateOf(40) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var chatQuery by rememberSaveable { mutableStateOf("") }
+    var matchCursor by remember { mutableStateOf(0) }
     val isAtBottom = remember { mutableStateOf(true) }
+    val pendingImages by vm.pendingImages.collectAsStateWithLifecycle()
+    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { vm.addImage(it) } }
     var draftApplied by rememberSaveable { mutableStateOf(false) }
     var showModelSheet by rememberSaveable { mutableStateOf(false) }
     var menuMessage by remember { mutableStateOf<MessageEntity?>(null) }
@@ -130,6 +139,13 @@ fun ChatScreen(
         }
     }
 
+    val visible = remember(messages, visibleCount) {
+        if (messages.size <= visibleCount) messages else messages.takeLast(visibleCount)
+    }
+    val matches = remember(visible, chatQuery) {
+        if (chatQuery.isBlank()) emptyList()
+        else visible.indices.filter { visible[it].text.contains(chatQuery.trim(), ignoreCase = true) }
+    }
     val activeConnection = remember(conversation?.connectionId) { vm.activeConnection() }
     val lastAssistantId = remember(messages) {
         messages.lastOrNull { it.role == "assistant" }?.id
@@ -205,6 +221,16 @@ fun ChatScreen(
                 )
             }
             Icon(
+                IconsL.search, "Search in chat", tint = c.textSecondary,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { searchOpen = !searchOpen }
+            )
+            Spacer(Modifier.width(14.dp))
+            Icon(
                 IconsL.more, "Options", tint = c.textSecondary,
                 modifier = Modifier
                     .size(20.dp)
@@ -213,6 +239,64 @@ fun ChatScreen(
                         indication = null
                     ) { renameDialog = true }
             )
+        }
+
+        if (searchOpen) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(c.card)
+                    .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(IconsL.search, null, tint = c.textMuted, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                BasicTextField(
+                    value = chatQuery,
+                    onValueChange = { chatQuery = it; matchCursor = 0 },
+                    singleLine = true,
+                    textStyle = t.rowTitle.copy(color = c.textPrimary),
+                    cursorBrush = SolidColor(c.accent),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { inner ->
+                        Box {
+                            if (chatQuery.isEmpty()) {
+                                Text("Search in this chat\u2026", style = t.rowTitle, color = c.textMuted)
+                            }
+                            inner()
+                        }
+                    }
+                )
+                if (chatQuery.isNotBlank()) {
+                    Text(
+                        if (matches.isEmpty()) "no matches"
+                        else "${matchCursor + 1} / ${matches.size}",
+                        style = t.caption,
+                        color = c.textMuted
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Icon(
+                        IconsL.chevronDown, "Next match", tint = if (matches.isEmpty()) c.textMuted else c.accent,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (matches.isNotEmpty()) {
+                                    matchCursor = (matchCursor + 1) % matches.size
+                                    scope.launch {
+                                        val header = if (messages.size > visible.size) 1 else 0
+                                        listState.animateScrollToItem(matches[matchCursor] + header)
+                                    }
+                                }
+                            }
+                    )
+                }
+            }
         }
 
         // ── Transcript ────────────────────────────────────────────────────────
@@ -226,7 +310,25 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(d.messageGap)
                 ) {
-                    items(messages, key = { it.id }) { message ->
+                    if (messages.size > visible.size) {
+                        item(key = "load-earlier") {
+                            Text(
+                                "Load earlier messages (${messages.size - visible.size})",
+                                style = t.caption.copy(fontWeight = FontWeight.SemiBold),
+                                color = c.accent,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { visibleCount += 60 }
+                                    .padding(vertical = 10.dp)
+                            )
+                        }
+                    }
+                    items(visible, key = { it.id }) { message ->
                         MessageRow(
                             message = message,
                             isLastAssistant = message.id == lastAssistantId,
@@ -304,6 +406,15 @@ fun ChatScreen(
             generating = generating,
             placeholder = "Message Aster…",
             enterToSend = settings.enterToSend,
+            pendingImages = pendingImages,
+            onRemoveImage = vm::removeImage,
+            onAttach = {
+                photoPicker.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                    )
+                )
+            },
             onSend = {
                 val text = input
                 input = ""
@@ -517,22 +628,54 @@ private fun MessageRow(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 280.dp)
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = 20.dp,
-                                topEnd = 20.dp,
-                                bottomStart = 20.dp,
-                                bottomEnd = 6.dp
-                            )
-                        )
-                        .background(c.accent)
-                        .combinedClickable(onClick = {}, onLongClick = onLongPress)
-                        .padding(horizontal = d.bubbleH, vertical = d.bubbleV)
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(message.text, style = t.body, color = Color.White)
+                    val imgs = remember(message.images) {
+                        com.mrrob.llmchat.data.ImageAttachments.parseList(message.images)
+                    }
+                    if (imgs.isNotEmpty()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
+                            imgs.forEach { path ->
+                                val bmp = remember(path) {
+                                    com.mrrob.llmchat.data.ImageAttachments.loadBitmap(path)
+                                }
+                                if (bmp != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = bmp,
+                                        contentDescription = "Sent image",
+                                        modifier = Modifier
+                                            .size(140.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (message.text.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .widthIn(max = 280.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 20.dp,
+                                        topEnd = 20.dp,
+                                        bottomStart = 20.dp,
+                                        bottomEnd = 6.dp
+                                    )
+                                )
+                                .background(c.accent)
+                                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                                .padding(horizontal = d.bubbleH, vertical = d.bubbleV)
+                        ) {
+                            Text(message.text, style = t.body, color = Color.White)
+                        }
+                    }
                 }
                 if (message.status == "QUEUED") {
                     Text("Queued · will send when online", style = t.tiny, color = c.warning)
@@ -573,6 +716,9 @@ private fun MessageRow(
                     }
                 }
             }
+            if (expandedDetails) {
+                MessagePills(message = message, vm = vm)
+            }
             val count = vm.variantCount(message)
             if (count > 1) {
                 Row(
@@ -606,9 +752,7 @@ private fun MessageRow(
                     )
                 }
             }
-            if (isLastAssistant) {
-                MessagePills(message = message, vm = vm)
-            }
+
         }
 
         else -> Text(
@@ -641,6 +785,8 @@ private fun Pill(
 ) {
     val c = LocalScheme.current
     val t = LocalType.current
+    var done by remember { mutableStateOf(false) }
+    val pillScope = rememberCoroutineScope()
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(99.dp))
@@ -648,18 +794,30 @@ private fun Pill(
             .border(1.dp, if (active) c.accent else c.border, RoundedCornerShape(99.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onToggle
-            )
+                indication = null
+            ) {
+                onToggle()
+                if (label == "Copy" && !done) {
+                    done = true
+                    pillScope.launch {
+                        kotlinx.coroutines.delay(1600)
+                        done = false
+                    }
+                }
+            }
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = if (active) c.accent else c.textSecondary, modifier = Modifier.size(12.dp))
+        Icon(
+            if (done) IconsL.check else icon, null,
+            tint = if (active || done) c.accent else c.textSecondary,
+            modifier = Modifier.size(12.dp)
+        )
         Spacer(Modifier.width(6.dp))
         Text(
-            label,
+            if (done) "Copied" else label,
             style = t.desc.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-            color = if (active) c.accent else c.textSecondary
+            color = if (active || done) c.accent else c.textSecondary
         )
     }
 }
@@ -849,6 +1007,9 @@ private fun Composer(
     value: String,
     onValueChange: (String) -> Unit,
     generating: Boolean,
+    pendingImages: List<String>,
+    onRemoveImage: (String) -> Unit,
+    onAttach: () -> Unit,
     placeholder: String,
     enterToSend: Boolean,
     onSend: () -> Unit,
@@ -860,7 +1021,7 @@ private fun Composer(
     val c = LocalScheme.current
     val t = LocalType.current
     val d = LocalDensity.current
-    val canSend = value.isNotBlank() && !generating
+    val canSend = (value.isNotBlank() || pendingImages.isNotEmpty()) && !generating
 
     Column(modifier = Modifier.fillMaxWidth().imePadding()) {
         Box(
@@ -893,12 +1054,75 @@ private fun Composer(
             }
         }
 
+        if (pendingImages.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                pendingImages.forEach { path ->
+                    Box {
+                        val bmp = remember(path) {
+                            com.mrrob.llmchat.data.ImageAttachments.loadBitmap(path)
+                        }
+                        if (bmp != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = bmp,
+                                contentDescription = "Attached image",
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, c.border, RoundedCornerShape(12.dp))
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(3.dp)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(c.textPrimary)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onRemoveImage(path) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                IconsL.close, "Remove",
+                                tint = c.bg,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = d.composerV),
             verticalAlignment = Alignment.Bottom
         ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(c.card)
+                    .border(1.dp, c.border, CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onAttach
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(IconsL.paperclip, "Attach image", tint = c.textSecondary, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(8.dp))
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,

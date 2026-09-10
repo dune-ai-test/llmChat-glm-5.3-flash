@@ -313,7 +313,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
 
             SectionLabel("About")
             AsterCard(contentPadding = PaddingValuesZero) {
-                AsterRow(label = "Version", icon = IconsL.info, value = "1.2.0", onClick = { privacyDialog = true })
+                AsterRow(label = "Version", icon = IconsL.info, value = com.mrrob.llmchat.BuildConfig.VERSION_NAME, onClick = { privacyDialog = true })
                 CardDivider()
                 AsterRow(label = "Privacy", icon = IconsL.block, onClick = { privacyDialog = true })
             }

@@ -95,6 +95,21 @@ fun AsterRoot(app: AsterApp) {
         accentTheme = settings.accentTheme
     ) {
         val vm: AppViewModel = viewModel(factory = AppViewModel.factory(app))
+
+        // Consume launcher-shortcut / widget actions ("new_chat", "voice").
+        LaunchedEffect(vm) {
+            com.mrrob.llmchat.LauncherIntent.action.collect { action ->
+                when (action) {
+                    "new_chat" -> {
+                        vm.selectTab(com.mrrob.llmchat.AsterTab.HOME)
+                        vm.startNewChat()
+                    }
+                    "voice" -> vm.selectTab(com.mrrob.llmchat.AsterTab.VOICE)
+                }
+                if (action != null) com.mrrob.llmchat.LauncherIntent.action.value = null
+            }
+        }
+
         AsterNavigation(vm)
     }
 }
@@ -346,8 +361,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
-                beyondViewportPageCount = 1,
-                userScrollEnabled = !drawerMode
+                beyondViewportPageCount = 1
             ) { page ->
                 Box(
                     modifier = Modifier
@@ -362,10 +376,12 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                                 var total = 0f
                                 detectHorizontalDragGestures(
                                     onDragStart = { total = 0f },
-                                    onDragEnd = { if (total > 110f) drawerOpener?.invoke() }
+                                    onDragEnd = { if (total > 90f) drawerOpener?.invoke() }
                                 ) { change, amount ->
-                                    total += amount
-                                    change.consume()
+                                    if (amount > 0) {
+                                        total += amount
+                                        change.consume()
+                                    }
                                 }
                             } else Modifier
                         )
@@ -427,7 +443,10 @@ private fun AsterDrawer(
         AsterTab.CONNECTIONS to ("APIs" to IconsL.server),
         AsterTab.SETTINGS to ("Settings" to IconsL.settings)
     )
-    androidx.compose.material3.ModalDrawerSheet(modifier = Modifier.width(288.dp)) {
+    androidx.compose.material3.ModalDrawerSheet(
+        modifier = Modifier.width(288.dp),
+        containerColor = c.card
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -480,7 +499,7 @@ private fun AsterDrawer(
             }
             Spacer(Modifier.weight(1f))
             Text(
-                "Version 1.2.0",
+                "Version " + com.mrrob.llmchat.BuildConfig.VERSION_NAME,
                 style = t.tiny,
                 color = c.textMuted,
                 modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
