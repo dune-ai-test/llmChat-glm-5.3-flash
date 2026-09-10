@@ -8,3 +8,8 @@ build/
 .externalNativeBuild
 .cxx
 *.hprof
+
+# dev helper scripts (local patch/audit tooling - not part of the app)
+tools/
+*.py
+__pycache__/
