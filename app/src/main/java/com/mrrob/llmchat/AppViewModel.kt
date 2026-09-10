@@ -629,6 +629,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Writes the staged bytes while the SAF write grant is definitely alive. */
+    /** Stores a persistable tree URI so exports never ask again. */
+    fun setExportFolder(uri: android.net.Uri) {
+        runCatching {
+            appContext.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
+        updateSettings { it.copy(exportFolderUri = uri.toString()) }
+    }
+
+    /** Writes the staged backup straight into the saved export folder. */
+    fun writeExportToFolder() {
+        val bytes = _exportBytes.value ?: return
+        val treeStr = settings.value.exportFolderUri
+        _exportBytes.value = null
+        if (treeStr.isBlank()) return
+        val tree = android.net.Uri.parse(treeStr)
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                    .format(java.util.Date())
+                val name = "aster-backup-$stamp.json"
+                val doc = android.provider.DocumentsContract.createDocument(
+                    appContext.contentResolver, tree, "application/octet-stream", name
+                ) ?: throw IllegalStateException("Could not create the file in the folder.")
+                appContext.contentResolver.openOutputStream(doc)?.use { out ->
+                    out.write(bytes)
+                    out.flush()
+                } ?: throw IllegalStateException("Could not open the file for writing.")
+                name
+            }
+            _dataOp.value = DataOp.Done(
+                result.fold(
+                    { "Saved \"$it\" to your export folder (${bytes.size / 1024} KB, encrypted)." },
+                    { "Export failed: ${it.message}" }
+                )
+            )
+        }
+    }
+
     fun writeExportTo(uri: android.net.Uri) {
         val bytes = _exportBytes.value ?: return
         runCatching {

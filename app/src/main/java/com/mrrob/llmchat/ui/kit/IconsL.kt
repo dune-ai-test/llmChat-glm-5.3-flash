@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.filled.Archive
@@ -143,6 +144,7 @@ object IconsL {
     val warning: ImageVector get() = Icons.Outlined.Info // warning triangle falls back to info
     val slider: ImageVector get() = Icons.Outlined.Thermostat
     val menu: ImageVector get() = Icons.Outlined.Menu
+    val folder: ImageVector get() = Icons.Outlined.Folder
     val star: ImageVector get() = Icons.Outlined.StarBorder
     val starFilled: ImageVector get() = Icons.Filled.Star
 }

@@ -276,7 +276,8 @@ fun AsterChip(
         Text(
             text = text,
             style = LocalType.current.desc.copy(fontWeight = FontWeight.SemiBold),
-            color = fg
+            color = fg,
+            maxLines = 1
         )
     }
 }
@@ -284,13 +285,40 @@ fun AsterChip(
 /** Set to a lambda by MainScaffold when navigation mode is "drawer". */
 val LocalDrawerOpener = androidx.compose.runtime.compositionLocalOf<(() -> Unit)?> { null }
 
+/** The Aster sparkle mark as a rounded tile (splash, drawer header, model card). */
+@Composable
+fun AsterLogoTile(
+    size: Dp,
+    radius: Dp,
+    background: Color,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    iconSize: Dp? = null
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(radius))
+            .background(background),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(com.mrrob.llmchat.R.drawable.ic_aster_sparkle),
+            contentDescription = "Aster",
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(tint),
+            modifier = Modifier.size(iconSize ?: size * 0.52f)
+        )
+    }
+}
+
 /** The uniform, non-scrolling top bar: large title + optional leading + actions. */
 @Composable
 fun ScreenTopBar(
     title: String,
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
-    actions: (@Composable () -> Unit)? = null
+    actions: (@Composable () -> Unit)? = null,
+    elevated: Boolean = true
 ) {
     val c = LocalScheme.current
     val opener = LocalDrawerOpener.current
@@ -323,7 +351,27 @@ fun ScreenTopBar(
         )
         if (actions != null) actions()
     }
-    Spacer(Modifier.height(2.dp))
+    if (elevated) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 0.dp)
+                .height(0.7.dp)
+                .background(c.border)
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(Color(0x14000000), Color(0x00000000))
+                    )
+                )
+        )
+    } else {
+        Spacer(Modifier.height(2.dp))
+    }
 }
 
 /** iOS switch matching the design: 46x27 pill, indigo ON track. */

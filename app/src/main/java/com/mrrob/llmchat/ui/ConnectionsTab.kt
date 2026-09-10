@@ -90,8 +90,9 @@ fun ConnectionsTab(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 60.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .height(380.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 IconTile(icon = IconsL.server, size = 64.dp, tileRadius = 20.dp, iconSize = 26.dp, background = c.accentTint)
                 Spacer(Modifier.height(14.dp))

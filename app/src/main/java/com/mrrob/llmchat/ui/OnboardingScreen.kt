@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -53,11 +54,12 @@ fun OnboardingScreen(onGetStarted: () -> Unit, onSkip: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = 24.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.End
         ) {
             Text(
@@ -157,7 +159,7 @@ private fun OnboardPage(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(26.dp)
+        verticalArrangement = Arrangement.spacedBy(26.dp, Alignment.CenterVertically)
     ) {
         Box(
             modifier = Modifier

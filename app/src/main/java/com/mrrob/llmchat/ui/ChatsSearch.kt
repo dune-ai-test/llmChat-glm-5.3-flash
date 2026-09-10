@@ -114,8 +114,9 @@ fun ChatsTab(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 60.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .height(360.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Icon(IconsL.chatBubble, null, tint = c.textMuted, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.height(12.dp))

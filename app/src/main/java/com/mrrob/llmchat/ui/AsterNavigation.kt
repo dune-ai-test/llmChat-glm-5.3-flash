@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -344,7 +345,8 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
-                beyondViewportPageCount = 1
+                beyondViewportPageCount = 1,
+                userScrollEnabled = !drawerMode
             ) { page ->
                 Box(
                     modifier = Modifier
@@ -353,6 +355,18 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                         .then(
                             if (drawerMode) Modifier.navigationBarsPadding().padding(bottom = 12.dp)
                             else Modifier.padding(bottom = 84.dp)
+                        )
+                        .then(
+                            if (drawerMode && page == 0) Modifier.pointerInput(page) {
+                                var total = 0f
+                                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                    onDragStart = { total = 0f },
+                                    onDragEnd = { if (total > 110f) drawerOpener?.invoke() }
+                                ) { change, amount ->
+                                    total += amount
+                                    change.consume()
+                                }
+                            } else Modifier
                         )
                 ) {
                     when (page) {
@@ -423,15 +437,13 @@ private fun AsterDrawer(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(start = 4.dp, top = 18.dp, bottom = 20.dp)
             ) {
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(c.accentTint),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(20.dp))
-                }
+                com.mrrob.llmchat.ui.kit.AsterLogoTile(
+                    size = 42.dp,
+                    radius = 13.dp,
+                    background = c.accentTint,
+                    tint = c.accent,
+                    iconSize = 24.dp
+                )
                 Column {
                     Text("Aster", style = t.cardTitle, color = c.textPrimary)
                     Text("Your AI workspace", style = t.tiny, color = c.textMuted)

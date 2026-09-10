@@ -47,7 +47,8 @@ data class AppSettings(
     val recentSearches: String = "",
     val favoriteModels: String = "",
     val accentTheme: String = "indigo",        // indigo | emerald | sunset
-    val navMode: String = "bottom"             // bottom | side
+    val navMode: String = "bottom",            // bottom | side
+    val exportFolderUri: String = ""
 ) {
     companion object {
         const val DEFAULT_SYSTEM_PROMPT =
@@ -114,7 +115,8 @@ class SettingsStore(context: Context) {
             recentSearches = getString("recent_searches", "").orEmpty(),
             favoriteModels = getString("favorite_models", "").orEmpty(),
             accentTheme = getString("accent_theme", "indigo") ?: "indigo",
-            navMode = getString("nav_mode", "bottom") ?: "bottom"
+            navMode = getString("nav_mode", "bottom") ?: "bottom",
+            exportFolderUri = getString("export_folder", "").orEmpty()
         )
     }
 
@@ -153,6 +155,7 @@ class SettingsStore(context: Context) {
             putString("favorite_models", next.favoriteModels)
             putString("accent_theme", next.accentTheme)
             putString("nav_mode", next.navMode)
+            putString("export_folder", next.exportFolderUri)
         }.apply()
     }
 

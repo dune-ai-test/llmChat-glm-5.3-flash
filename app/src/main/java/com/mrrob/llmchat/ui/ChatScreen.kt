@@ -55,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -155,6 +156,21 @@ fun ChatScreen(
             .background(c.bg)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .pointerInput(Unit) {
+                var total = 0f
+                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = {
+                        if (total > 130f) {
+                            vm.saveDraft(input)
+                            onBack()
+                        }
+                    }
+                ) { change, amount ->
+                    if (amount > 0) total += amount
+                    change.consume()
+                }
+            }
     ) {
         // ── Header ────────────────────────────────────────────────────────────
         Row(
@@ -285,10 +301,6 @@ fun ChatScreen(
             value = input,
             onValueChange = { input = it },
             generating = generating,
-            onHome = {
-                vm.saveDraft(input)
-                onBack()
-            },
             placeholder = "Message Aster…",
             enterToSend = settings.enterToSend,
             onSend = {
@@ -836,7 +848,6 @@ private fun Composer(
     value: String,
     onValueChange: (String) -> Unit,
     generating: Boolean,
-    onHome: () -> Unit,
     placeholder: String,
     enterToSend: Boolean,
     onSend: () -> Unit,
@@ -887,22 +898,6 @@ private fun Composer(
                 .padding(horizontal = 16.dp, vertical = d.composerV),
             verticalAlignment = Alignment.Bottom
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(c.card)
-                    .border(1.dp, c.border, CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onHome
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(IconsL.home, "Home", tint = c.textSecondary, modifier = Modifier.size(19.dp))
-            }
-            Spacer(Modifier.width(8.dp))
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,

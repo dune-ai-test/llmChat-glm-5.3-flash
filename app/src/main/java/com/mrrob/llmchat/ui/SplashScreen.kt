@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ fun SplashScreen(onFinished: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .padding(bottom = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -57,15 +59,13 @@ fun SplashScreen(onFinished: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(c.accentTint),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(IconsL.sparkles, null, tint = c.accent, modifier = Modifier.size(42.dp))
-            }
+            com.mrrob.llmchat.ui.kit.AsterLogoTile(
+                size = 100.dp,
+                radius = 30.dp,
+                background = c.accentTint,
+                tint = c.accent,
+                iconSize = 54.dp
+            )
             Spacer(Modifier.height(18.dp))
             Text("Aster", style = t.heroTitle.copy(fontSize = 34.sp, letterSpacing = (-0.5).sp), color = c.textPrimary)
             Spacer(Modifier.height(4.dp))

@@ -153,17 +153,25 @@ fun HomeScreen(
             }
         }
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            if (active == null) {
+        if (active == null) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 HomeNoConnection(app = app)
-            } else {
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
                 ModelCard(
                     connection = active,
                     dimmed = !online,
@@ -234,7 +242,8 @@ fun HomeScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 
@@ -282,14 +291,14 @@ private fun ModelCard(
             .clip(RoundedCornerShape(18.dp))
             .background(c.card)
             .border(1.dp, c.border, RoundedCornerShape(18.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconTile(
             icon = IconsL.sparkles,
-            size = 38.dp,
-            tileRadius = 12.dp,
-            iconSize = 18.dp,
+            size = 44.dp,
+            tileRadius = 14.dp,
+            iconSize = 20.dp,
             background = if (dimmed) c.fill else c.accentTint,
             tint = if (dimmed) c.textMuted else c.accent
         )
@@ -300,13 +309,13 @@ private fun ModelCard(
         ) {
             Text(
                 connection.activeModel.ifBlank { "No model selected" },
-                style = t.rowTitle.copy(fontWeight = FontWeight.SemiBold),
+                style = t.rowTitle.copy(fontWeight = FontWeight.Bold, fontSize = 17.sp),
                 color = c.textPrimary,
                 maxLines = 1
             )
             Text(
                 "${providerLabel(connection.provider)} · ${connection.name}",
-                style = t.tiny.copy(fontSize = 11.sp),
+                style = t.tiny.copy(fontSize = 12.sp),
                 color = c.textMuted,
                 maxLines = 1
             )
@@ -404,8 +413,7 @@ private fun HomeNoConnection(app: AppViewModel) {
     val t = LocalType.current
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 48.dp, bottom = 24.dp),
+            .fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -117,7 +118,10 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     }
 
     LaunchedEffect(exportBytes) {
-        if (exportBytes != null) exportLauncher.launch("aster-backup.json")
+        if (exportBytes != null) {
+            if (settings.exportFolderUri.isNotBlank()) app.writeExportToFolder()
+            else exportLauncher.launch("aster-backup.json")
+        }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -127,6 +131,12 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
             app.pendingImportUri = uri
             app.importBackup(uri, "")
         }
+    }
+
+    val treeLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) app.setExportFolder(uri)
     }
 
     Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
@@ -165,7 +175,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         Text(settings.displayName.ifBlank { "Your workspace" }, style = t.cardTitle, color = c.textPrimary)
                         Text(
-                            "${connections.size} connection${if (connections.size == 1) "" else "s"} \u00b7 everything stored encrypted on this device",
+                            "${connections.size} connection${if (connections.size == 1) "" else "s"} \u00b7 stored encrypted on-device",
                             style = t.desc.copy(fontSize = 12.5.sp),
                             color = c.textSecondary,
                             maxLines = 1
@@ -241,7 +251,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                 CardDivider()
                 AsterRow(
                     label = "Navigation",
-                    icon = IconsL.list,
+                    icon = IconsL.menu,
                     value = if (settings.navMode == "side") "Sidebar" else "Bottom bar",
                     showChevron = true,
                     onClick = { onNavigate("settings/appearance") }
@@ -289,9 +299,16 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                 CardDivider()
                 AsterRow(label = "Import backup", icon = IconsL.arrowSwap, onClick = { importLauncher.launch(arrayOf("*/*")) })
                 CardDivider()
-                AsterRow(label = "Reset settings", onClick = { resetConfirm = true })
+                AsterRow(
+                    label = "Export folder",
+                    icon = IconsL.folder,
+                    value = folderDisplayName(settings.exportFolderUri) ?: "Ask each time",
+                    onClick = { treeLauncher.launch(null) }
+                )
                 CardDivider()
-                AsterRow(label = "Delete all data", destructive = true, onClick = { deleteConfirm = true })
+                AsterRow(label = "Reset settings", icon = IconsL.refresh, onClick = { resetConfirm = true })
+                CardDivider()
+                AsterRow(label = "Delete all data", icon = IconsL.trash, destructive = true, onClick = { deleteConfirm = true })
             }
 
             SectionLabel("About")
@@ -301,7 +318,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                 AsterRow(label = "Privacy", icon = IconsL.block, onClick = { privacyDialog = true })
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 
@@ -408,6 +425,15 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
             onSave = { debugLog.clear() }
         )
     }
+}
+
+/** Pretty name for the saved export folder tree URI. */
+private fun folderDisplayName(uriStr: String): String? {
+    if (uriStr.isBlank()) return null
+    return runCatching {
+        java.net.URLDecoder.decode(uriStr.substringAfterLast('/'), "UTF-8")
+            .substringAfterLast(':')
+    }.getOrNull()?.takeIf { it.isNotBlank() }
 }
 
 /** Backup password entry (typed twice for export, once for import). */
@@ -565,7 +591,10 @@ fun ChatSettingsScreen(app: AppViewModel, onBack: () -> Unit) {
             }
 
             // Preset chips + custom prompt (28)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
                 listOf("concise", "detailed", "code-first", "custom").forEach { preset ->
                     com.mrrob.llmchat.ui.kit.AsterChip(
                         text = preset.replaceFirstChar { it.uppercase() },

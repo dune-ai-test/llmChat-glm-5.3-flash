@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -212,6 +213,16 @@ fun VoiceScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .pointerInput(Unit) {
+                var total = 0f
+                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = { if (total > 120f) onExit() }
+                ) { change, amount ->
+                    if (amount > 0) total += amount
+                    change.consume()
+                }
+            }
     ) {
         LaunchedEffect(pendingVoice) {
             pendingVoice?.let { id ->
@@ -222,20 +233,6 @@ fun VoiceScreen(
         // ── Top bar (matches Home / Chats / Connections placement) ─────────────
         ScreenTopBar(
             title = "Voice",
-            leading = {
-                Icon(
-                    IconsL.chevronDown, "Minimize", tint = c.textSecondary,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            recognizer.stopListening()
-                            onExit()
-                        }
-                )
-            },
             actions = {
                 Row(
                     modifier = Modifier
@@ -400,7 +397,6 @@ fun VoiceScreen(
                     vm.endSession()
                     onExit()
                 })
-                DeckButton(IconsL.home, onClick = { recognizer.stopListening(); onExit() })
             }
         } else {
             Column(
@@ -436,7 +432,6 @@ fun VoiceScreen(
                     vm.endSession()
                     onExit()
                 })
-                DeckButton(IconsL.home, onClick = { recognizer.stopListening(); onExit() })
             }
         }  // fullscreen controls column
         }
@@ -605,7 +600,7 @@ private fun CenterMic(phase: VoiceViewModel.Phase, onClick: () -> Unit) {
     }
     Box(
         modifier = Modifier
-            .size(76.dp)
+            .size(56.dp)
             .clip(CircleShape)
             .background(bg)
             .clickable(
@@ -617,11 +612,11 @@ private fun CenterMic(phase: VoiceViewModel.Phase, onClick: () -> Unit) {
     ) {
         when (phase) {
             VoiceViewModel.Phase.PROCESSING -> androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(24.dp),
                 color = Color.White,
                 strokeWidth = 2.5.dp
             )
-            else -> Icon(icon!!, null, tint = Color.White, modifier = Modifier.size(30.dp))
+            else -> Icon(icon!!, null, tint = Color.White, modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -631,12 +626,13 @@ private fun DeckButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     danger: Boolean = false,
     activeBg: Boolean = false,
+    size: androidx.compose.ui.unit.Dp = 56.dp,
     onClick: () -> Unit
 ) {
     val c = LocalScheme.current
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(size)
             .clip(CircleShape)
             .background(
                 when {
