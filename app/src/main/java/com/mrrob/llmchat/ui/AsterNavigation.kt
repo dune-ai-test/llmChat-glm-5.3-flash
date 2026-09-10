@@ -446,7 +446,7 @@ private fun AsterDrawer(
     )
     androidx.compose.material3.ModalDrawerSheet(
         modifier = Modifier.width(288.dp),
-        containerColor = c.card
+        drawerContainerColor = c.card
     ) {
         Column(
             modifier = Modifier
