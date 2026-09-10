@@ -14,3 +14,6 @@ tools/
 *.py
 __pycache__/
 ui/
+
+# release signing material (written by CI only)
+*.keystore

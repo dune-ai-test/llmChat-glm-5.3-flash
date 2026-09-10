@@ -17,11 +17,23 @@ android {
         versionName = "1.2.0"
     }
 
+    signingConfigs {
+        val releaseKeystore = file("release.keystore")
+        if (releaseKeystore.exists() && System.getenv("ANDROID_KEYSTORE_PASSWORD") != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the CI artifact installs directly on a device.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 
