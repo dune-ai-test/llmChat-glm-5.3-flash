@@ -45,7 +45,9 @@ data class AppSettings(
     val debugLogging: Boolean = false,
 
     val recentSearches: String = "",
-    val favoriteModels: String = ""
+    val favoriteModels: String = "",
+    val accentTheme: String = "indigo",        // indigo | emerald | sunset
+    val navMode: String = "bottom"             // bottom | side
 ) {
     companion object {
         const val DEFAULT_SYSTEM_PROMPT =
@@ -110,7 +112,9 @@ class SettingsStore(context: Context) {
             rawParams = getString("raw_params", "").orEmpty(),
             debugLogging = getBoolean("debug_logging", false),
             recentSearches = getString("recent_searches", "").orEmpty(),
-            favoriteModels = getString("favorite_models", "").orEmpty()
+            favoriteModels = getString("favorite_models", "").orEmpty(),
+            accentTheme = getString("accent_theme", "indigo") ?: "indigo",
+            navMode = getString("nav_mode", "bottom") ?: "bottom"
         )
     }
 
@@ -147,6 +151,8 @@ class SettingsStore(context: Context) {
             putBoolean("debug_logging", next.debugLogging)
             putString("recent_searches", next.recentSearches)
             putString("favorite_models", next.favoriteModels)
+            putString("accent_theme", next.accentTheme)
+            putString("nav_mode", next.navMode)
         }.apply()
     }
 

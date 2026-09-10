@@ -70,6 +70,7 @@ import com.mrrob.llmchat.ui.theme.LocalType
  * deck and an always-available transcript panel. States: ready → listening
  * → processing → speaking, with continuous mode and barge-in.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceScreen(
     app: AppViewModel,
@@ -88,8 +89,10 @@ fun VoiceScreen(
     val error by vm.error.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val conversation by vm.conversation.collectAsStateWithLifecycle()
+    val connections by app.connections.collectAsStateWithLifecycle()
 
     var showTranscript by remember { mutableStateOf(false) }
+    var showModelSheet by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var sessionActive by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(false) }
 
@@ -235,18 +238,6 @@ fun VoiceScreen(
                 )
             },
             actions = {
-                val currentModel = conversation?.model?.ifBlank { vm.connection()?.activeModel ?: "" }
-                    ?: vm.connection()?.activeModel ?: ""
-                if (currentModel.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.padding(end = 12.dp)
-                    ) {
-                        Text(currentModel, style = t.caption, color = c.textSecondary, maxLines = 1)
-                        StatusDot(online = true)
-                    }
-                }
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(99.dp))
@@ -308,6 +299,18 @@ fun VoiceScreen(
                     active = phase == VoiceViewModel.Phase.LISTENING || phase == VoiceViewModel.Phase.SPEAKING
                 )
                 Spacer(Modifier.height(22.dp))
+                if (phase == VoiceViewModel.Phase.LISTENING && partial.isNotBlank()) {
+                    Text(
+                        "\u201c$partial\u201d",
+                        style = t.heroTitle,
+                        color = c.accent,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 36.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Text(centerLabel, style = t.heroTitle, color = c.textPrimary)
                 if (centerSub.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
@@ -363,6 +366,11 @@ fun VoiceScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            val deckModel = conversation?.model?.ifBlank { vm.connection()?.activeModel ?: "" }
+                ?: vm.connection()?.activeModel ?: ""
+            if (deckModel.isNotBlank()) {
+                ModelChip(model = deckModel, onClick = { showModelSheet = true })
+            }
             VoiceWave(phase = phase, active = phase == VoiceViewModel.Phase.LISTENING || phase == VoiceViewModel.Phase.SPEAKING)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(centerLabel, style = t.body.copy(fontWeight = FontWeight.SemiBold), color = c.textPrimary)
@@ -396,6 +404,16 @@ fun VoiceScreen(
                 DeckButton(IconsL.home, onClick = { recognizer.stopListening(); onExit() })
             }
         } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+            val hiddenModel = conversation?.model?.ifBlank { vm.connection()?.activeModel ?: "" }
+                ?: vm.connection()?.activeModel ?: ""
+            if (hiddenModel.isNotBlank()) {
+                ModelChip(model = hiddenModel, onClick = { showModelSheet = true })
+                Spacer(Modifier.height(12.dp))
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -421,7 +439,61 @@ fun VoiceScreen(
                 })
                 DeckButton(IconsL.home, onClick = { recognizer.stopListening(); onExit() })
             }
+        }  // fullscreen controls column
         }
+    }
+
+    if (showModelSheet) {
+        val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showModelSheet = false },
+            sheetState = sheetState,
+            containerColor = c.card
+        ) {
+            val groups = remember(connections) {
+                connections.filter { it.enabled }.map { conn ->
+                    conn to (app.repo.modelsOf(conn) + conn.activeModel).filter(String::isNotBlank).distinct()
+                }.filter { it.second.isNotEmpty() }
+            }
+            ModelSheetContent(
+                groups = groups,
+                current = conversation?.model ?: "",
+                favorites = app.favoriteModels(),
+                onToggleFavorite = app::toggleFavoriteModel,
+                onSelect = { model, connId ->
+                    vm.switchModel(model, connId)
+                    showModelSheet = false
+                }
+            )
+        }
+    }
+
+}
+
+
+@Composable
+private fun ModelChip(model: String, onClick: () -> Unit) {
+    val c = LocalScheme.current
+    val t = LocalType.current
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(c.fill)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        StatusDot(online = true)
+        Text(
+            "$model  \u00b7  change",
+            style = t.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            color = c.textSecondary
+        )
     }
 }
 
@@ -521,9 +593,6 @@ private fun SkeletonBubble() {
 @Composable
 private fun CenterMic(phase: VoiceViewModel.Phase, onClick: () -> Unit) {
     val c = LocalScheme.current
-    val transition = rememberInfiniteTransition(label = "micpulse")
-    val pulse by transition.animateFloat(1f, 1.12f,
-        infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "p")
     val bg = when (phase) {
         VoiceViewModel.Phase.LISTENING -> c.accent
         VoiceViewModel.Phase.PROCESSING -> c.fill
@@ -538,7 +607,6 @@ private fun CenterMic(phase: VoiceViewModel.Phase, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(76.dp)
-            .scale(if (phase == VoiceViewModel.Phase.LISTENING) pulse else 1f)
             .clip(CircleShape)
             .background(bg)
             .clickable(

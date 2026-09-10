@@ -308,8 +308,24 @@ class AppRepository(
 
     suspend fun exportJson(): String {
         val out = JSONObject()
-        out.put("version", 1)
+        out.put("version", 2)
         out.put("exportedAt", System.currentTimeMillis())
+        val conns = JSONArray()
+        connectionDao.allOnce().forEach { c ->
+            val obj = JSONObject()
+            obj.put("id", c.id)
+            obj.put("name", c.name)
+            obj.put("provider", c.provider)
+            obj.put("baseUrl", c.baseUrl)
+            obj.put("models", JSONArray(c.modelsJson))
+            obj.put("activeModel", c.activeModel)
+            obj.put("isDefault", c.isDefault)
+            obj.put("enabled", c.enabled)
+            obj.put("apiKey", settingsStore.apiKey(c.id))
+            obj.put("headers", JSONObject(settingsStore.prefsString("headers_${c.id}", "{}")))
+            conns.put(obj)
+        }
+        out.put("connections", conns)
         val convs = JSONArray()
         conversationDao.allOnce().forEach { c ->
             val obj = JSONObject()
@@ -348,8 +364,34 @@ class AppRepository(
         } catch (_: Exception) {
             return ImportResult.Failure("That file isn't valid JSON.")
         }
+        var connsImported = 0
+        val connIdByOld = HashMap<String, String>()
+        root.optJSONArray("connections")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val name = o.optString("name")
+                val baseUrl = o.optString("baseUrl")
+                if (name.isBlank() || baseUrl.isBlank()) continue
+                val models = o.optJSONArray("models")
+                val entity = ConnectionEntity(
+                    name = name,
+                    provider = o.optString("provider", "CUSTOM_API"),
+                    baseUrl = baseUrl,
+                    modelsJson = (models ?: JSONArray()).toString(),
+                    activeModel = o.optString("activeModel"),
+                    enabled = o.optBoolean("enabled", true),
+                    isDefault = o.optBoolean("isDefault", false)
+                )
+                connectionDao.upsert(entity)
+                val key = o.optString("apiKey")
+                if (key.isNotBlank()) settingsStore.setApiKey(entity.id, key)
+                o.optJSONObject("headers")?.let { h -> settingsStore.prefsPutString("headers_${entity.id}", h.toString()) }
+                connIdByOld[o.optString("id")] = entity.id
+                connsImported++
+            }
+        }
         val convs = root.optJSONArray("conversations")
-            ?: return ImportResult.Failure("No conversations found in the file.")
+            ?: if (connsImported > 0) JSONArray() else return ImportResult.Failure("Nothing importable in this file.")
         var imported = 0
         for (i in 0 until convs.length()) {
             val c = convs.optJSONObject(i) ?: continue
@@ -361,7 +403,8 @@ class AppRepository(
                 title = title,
                 createdAt = c.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = c.optLong("updatedAt", System.currentTimeMillis()),
-                connectionId = c.optString("connectionId"),
+                connectionId = connIdByOld[c.optString("connectionId")]
+                    ?: c.optString("connectionId"),
                 model = c.optString("model"),
                 systemPrompt = c.optString("systemPrompt"),
                 kind = c.optString("kind", "TEXT"),
@@ -384,15 +427,15 @@ class AppRepository(
             }
             imported++
         }
-        return if (imported == 0) {
-            ImportResult.Failure("The file contained no importable conversations.")
+        return if (imported == 0 && connsImported == 0) {
+            ImportResult.Failure("The file contained no importable conversations or connections.")
         } else {
-            ImportResult.Success(imported)
+            ImportResult.Success(imported, connsImported)
         }
     }
 
     sealed class ImportResult {
-        data class Success(val count: Int) : ImportResult()
+        data class Success(val conversations: Int, val connections: Int = 0) : ImportResult()
         data class Failure(val reason: String) : ImportResult()
     }
 

@@ -14,6 +14,7 @@ import com.mrrob.llmchat.data.MessageEntity
 import com.mrrob.llmchat.data.TestStep
 import com.mrrob.llmchat.data.TestStepState
 import com.mrrob.llmchat.data.WireMessage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Which tab of the root scaffold is showing. */
 enum class AsterTab { HOME, CHATS, VOICE, CONNECTIONS, SETTINGS }
@@ -606,6 +608,67 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun exportAllData(): String = repo.exportJson()
 
     suspend fun importData(raw: String): AppRepository.ImportResult = repo.importJson(raw)
+
+    /** Encrypts the workspace with the vault format and writes it to [uri]. */
+    fun exportBackup(uri: android.net.Uri, password: String) {
+        viewModelScope.launch {
+            _dataOp.value = DataOp.Running("Exporting…")
+            try {
+                val json = repo.exportJson()
+                val bytes = com.mrrob.llmchat.data.Vault.encrypt(json, password)
+                withContext(Dispatchers.IO) {
+                    appContext.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        ?: throw IllegalStateException("Could not open the file.")
+                }
+                _dataOp.value = DataOp.Done("Backup exported (${bytes.size / 1024} KB, encrypted).")
+            } catch (e: Exception) {
+                _dataOp.value = DataOp.Done("Export failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Reads a backup; asks the UI for a password when the file is a vault. */
+    fun importBackup(uri: android.net.Uri, password: String) {
+        viewModelScope.launch {
+            _dataOp.value = DataOp.Running("Importing…")
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw IllegalStateException("Could not read the file.")
+                }
+                val json = if (com.mrrob.llmchat.data.Vault.isVault(bytes)) {
+                    com.mrrob.llmchat.data.Vault.decrypt(bytes, password)
+                } else {
+                    String(bytes, Charsets.UTF_8)
+                }
+                _dataOp.value = when (val r = repo.importJson(json)) {
+                    is AppRepository.ImportResult.Success -> DataOp.Done(
+                        "Imported ${r.conversations} conversation${if (r.conversations == 1) "" else "s"}" +
+                            if (r.connections > 0) " and ${r.connections} connection${if (r.connections == 1) "" else "s"}." else "."
+                    )
+                    is AppRepository.ImportResult.Failure -> DataOp.Done(r.reason)
+                }
+            } catch (e: com.mrrob.llmchat.data.Vault.VaultException) {
+                _dataOp.value = DataOp.NeedPassword(e.message ?: "Password required.")
+            } catch (e: Exception) {
+                _dataOp.value = DataOp.Done("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    sealed class DataOp {
+        data object Idle : DataOp()
+        data class Running(val label: String) : DataOp()
+        data class Done(val message: String) : DataOp()
+        data class NeedPassword(val reason: String) : DataOp()
+    }
+
+    private val _dataOp = MutableStateFlow<DataOp>(DataOp.Idle)
+    val dataOp: StateFlow<DataOp> = _dataOp.asStateFlow()
+    fun clearDataOp() { _dataOp.value = DataOp.Idle }
+
+    /** Buffer for the uri waiting on a password during import. */
+    var pendingImportUri: android.net.Uri? = null
 
     fun clearAllData() {
         viewModelScope.launch {

@@ -165,6 +165,20 @@ class VoiceViewModel(private val app: AppViewModel) : ViewModel() {
         onSpeakFinished?.invoke()
     }
 
+    /** Switch the model of the running voice conversation (and its connection). */
+    fun switchModel(model: String, connectionId: String) {
+        viewModelScope.launch {
+            val conv = _conversation.value ?: return@launch
+            val newConn = connectionId.ifBlank { conv.connectionId }
+            repo().updateConversation(conv.copy(model = model, connectionId = newConn))
+            repo().insertMessage(
+                MessageEntity(conversationId = conv.id, role = "system", text = "Model switched to $model")
+            )
+            repo().conversation(conv.id)?.let { _conversation.value = it }
+            reloadTranscript(conv.id)
+        }
+    }
+
     fun interrupt() {
         generationJob?.cancel()
         onSpeakFinished = null

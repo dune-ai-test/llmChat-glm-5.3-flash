@@ -132,6 +132,31 @@ val DarkScheme = AsterScheme(
     codeFg = AsterColors.CodeFg
 )
 
+@Immutable
+data class AccentTriple(val accent: Color, val accentDeep: Color, val tint: Color)
+
+/** The selectable brand accents. Indigo is the designed original. */
+object Accents {
+    val indigoLight = AccentTriple(Color(0xFF5B5BD6), Color(0xFF6E6EE6), Color(0xFFECECFB))
+    val indigoDark = AccentTriple(Color(0xFF7B7BE8), Color(0xFF8D8DED), Color(0xFF272740))
+    val emeraldLight = AccentTriple(Color(0xFF0F9D6B), Color(0xFF12B778), Color(0xFFE1F5EC))
+    val emeraldDark = AccentTriple(Color(0xFF34C98F), Color(0xFF4BD6A0), Color(0xFF14302A))
+    val sunsetLight = AccentTriple(Color(0xFFE0653A), Color(0xFFEF7C52), Color(0xFFFBEBE3))
+    val sunsetDark = AccentTriple(Color(0xFFF0764E), Color(0xFFFF8F6B), Color(0xFF3A241B))
+
+    fun triple(name: String, dark: Boolean): AccentTriple = when (name) {
+        "emerald" -> if (dark) emeraldDark else emeraldLight
+        "sunset" -> if (dark) sunsetDark else sunsetLight
+        else -> if (dark) indigoDark else indigoLight
+    }
+}
+
+fun schemeFor(dark: Boolean, accentTheme: String): AsterScheme {
+    val base = if (dark) DarkScheme else LightScheme
+    val a = Accents.triple(accentTheme, dark)
+    return base.copy(accent = a.accent, accentDeep = a.accentDeep, accentTint = a.tint)
+}
+
 val LocalScheme = staticCompositionLocalOf { LightScheme }
 
 val InterFamily = FontFamily(
@@ -245,6 +270,7 @@ fun AsterTheme(
     themeMode: String, // "system" | "light" | "dark"
     fontScaleValue: String, // "small" | "medium" | "large"
     compactDensity: Boolean,
+    accentTheme: String = "indigo", // indigo | emerald | sunset
     content: @Composable () -> Unit
 ) {
     val dark = when (themeMode) {
@@ -258,7 +284,7 @@ fun AsterTheme(
         else -> 1f
     }
     androidx.compose.runtime.CompositionLocalProvider(
-        LocalScheme provides if (dark) DarkScheme else LightScheme,
+        LocalScheme provides schemeFor(dark, accentTheme),
         LocalType provides buildType(scale),
         LocalDensity provides if (compactDensity) DensityCompact else DensityComfortable
     ) {

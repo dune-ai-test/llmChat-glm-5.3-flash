@@ -186,18 +186,6 @@ fun ChatScreen(
                     color = c.textPrimary,
                     maxLines = 1
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        conversation?.model?.ifBlank { activeConnection?.activeModel ?: "" } ?: "No model",
-                        style = t.caption,
-                        color = c.textSecondary,
-                        maxLines = 1
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    StatusDot(online = online)
-                    Spacer(Modifier.width(5.dp))
-                    Text(if (online) "Connected" else "Offline", style = t.caption, color = c.textSecondary)
-                }
             }
             Icon(
                 IconsL.more, "Options", tint = c.textSecondary,
@@ -628,16 +616,6 @@ private fun MessagePills(message: MessageEntity, vm: ChatViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Pill(IconsL.copy, "Copy") { clipboard.setText(AnnotatedString(message.text)) }
         Pill(IconsL.refresh, "Regenerate") { vm.regenerate(message) }
-        Pill(
-            IconsL.thumbUp, "Good",
-            active = message.rating == 1,
-            onToggle = { vm.rate(message, if (message.rating == 1) 0 else 1) }
-        )
-        Pill(
-            IconsL.thumbDown, "Bad",
-            active = message.rating == -1,
-            onToggle = { vm.rate(message, if (message.rating == -1) 0 else -1) }
-        )
     }
 }
 
