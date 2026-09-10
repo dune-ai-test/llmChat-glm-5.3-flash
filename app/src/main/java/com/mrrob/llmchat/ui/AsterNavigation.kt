@@ -1,6 +1,7 @@
 package com.mrrob.llmchat.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -359,7 +360,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                         .then(
                             if (drawerMode && page == 0) Modifier.pointerInput(page) {
                                 var total = 0f
-                                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                detectHorizontalDragGestures(
                                     onDragStart = { total = 0f },
                                     onDragEnd = { if (total > 110f) drawerOpener?.invoke() }
                                 ) { change, amount ->

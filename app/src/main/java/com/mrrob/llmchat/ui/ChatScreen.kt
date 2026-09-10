@@ -2,6 +2,7 @@ package com.mrrob.llmchat.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -158,7 +159,7 @@ fun ChatScreen(
             .navigationBarsPadding()
             .pointerInput(Unit) {
                 var total = 0f
-                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                detectHorizontalDragGestures(
                     onDragStart = { total = 0f },
                     onDragEnd = {
                         if (total > 130f) {
