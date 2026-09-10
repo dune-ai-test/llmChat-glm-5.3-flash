@@ -108,8 +108,15 @@ class ChatViewModel(
     /** The draft restored from the conversation on first open. */
     val initialDraft: String get() = _conversation.value?.draft.orEmpty()
 
+    /** Called when the ChatScreen enters composition. */
+    fun onVisible() { app.activeChatConversationId = conversationId }
+
+    /** Called when the ChatScreen leaves composition; VM (and generation) stay alive. */
+    fun onHidden() {
+        if (app.activeChatConversationId == conversationId) app.activeChatConversationId = null
+    }
+
     init {
-        app.activeChatConversationId = conversationId
         viewModelScope.launch {
             repo.conversation(conversationId)?.let { conv ->
                 _conversation.value = conv

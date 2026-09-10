@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -217,10 +219,19 @@ private fun AsterNavigation(vm: AppViewModel) {
             arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
         ) { entry ->
             val id = entry.arguments?.getString("conversationId").orEmpty()
+            // Scope to the activity: leaving the chat must NOT cancel generation.
+            val storeOwner = (androidx.compose.ui.platform.LocalActivity.current
+                as? androidx.lifecycle.ViewModelStoreOwner)
+                ?: checkNotNull(LocalViewModelStoreOwner.current)
             val chatVm: ChatViewModel = viewModel(
+                viewModelStoreOwner = storeOwner,
                 key = "chat-$id",
                 factory = ChatVmFactory(vm, id)
             )
+            DisposableEffect(chatVm) {
+                chatVm.onVisible()
+                onDispose { chatVm.onHidden() }
+            }
             ChatScreen(
                 vm = chatVm,
                 favorites = vm.favoriteModels(),
