@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeConsumed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -345,6 +346,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
         ) {
             androidx.compose.material3.ModalNavigationDrawer(
                 drawerState = drawerState,
+                gesturesEnabled = false,
                 drawerContent = {
                     if (drawerMode) {
                         AsterDrawer(
@@ -360,8 +362,37 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
             Box(modifier = Modifier.fillMaxSize()) {
             HorizontalPager(
                 state = pager,
-                modifier = Modifier.fillMaxSize(),
-                beyondViewportPageCount = 1
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (drawerMode) Modifier.pointerInput(drawerMode) {
+                            var total = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { total = 0f },
+                                onDragEnd = {
+                                    val cur = pager.currentPage
+                                    when {
+                                        total > 90f ->
+                                            if (cur == 0) drawerOpener?.invoke()
+                                            else uiScope.launch { pager.animateScrollToPage(cur - 1) }
+                                        total < -90f ->
+                                            if (cur < AsterTab.entries.lastIndex) {
+                                                uiScope.launch { pager.animateScrollToPage(cur + 1) }
+                                            }
+                                    }
+                                    total = 0f
+                                }
+                            ) { change, amount ->
+                                // let horizontally-scrollable children (code blocks, chip rows) win first
+                                if (!change.positionChangeConsumed()) {
+                                    total += amount
+                                    change.consume()
+                                }
+                            }
+                        } else Modifier
+                    ),
+                beyondViewportPageCount = 1,
+                userScrollEnabled = !drawerMode
             ) { page ->
                 Box(
                     modifier = Modifier
@@ -370,20 +401,6 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                         .then(
                             if (drawerMode) Modifier.navigationBarsPadding().padding(bottom = 12.dp)
                             else Modifier.padding(bottom = 84.dp)
-                        )
-                        .then(
-                            if (drawerMode && page == 0) Modifier.pointerInput(page) {
-                                var total = 0f
-                                detectHorizontalDragGestures(
-                                    onDragStart = { total = 0f },
-                                    onDragEnd = { if (total > 90f) drawerOpener?.invoke() }
-                                ) { change, amount ->
-                                    if (amount > 0) {
-                                        total += amount
-                                        change.consume()
-                                    }
-                                }
-                            } else Modifier
                         )
                 ) {
                     when (page) {
