@@ -62,7 +62,13 @@ object Vault {
         val ciphertext = bytes.copyOfRange(magicLen + SALT_LEN + IV_LEN, macStart)
         val storedMac = bytes.copyOfRange(macStart, bytes.size)
 
-        val (encKey, macKey) = deriveKeys(password, salt)
+        val keys = try {
+            deriveKeys(password, salt)
+        } catch (e: Exception) {
+            throw VaultException("Wrong password - the backup could not be verified.")
+        }
+        val encKey = keys.first
+        val macKey = keys.second
         val computed = hmac(macKey, bytes.copyOfRange(0, macStart))
         if (!MessageDigest.isEqual(computed, storedMac)) {
             throw VaultException("Wrong password - the backup could not be verified.")

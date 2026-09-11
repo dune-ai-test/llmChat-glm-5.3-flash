@@ -731,6 +731,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IllegalStateException("Could not read the file.")
                 val json = if (com.mrrob.llmchat.data.Vault.isVault(bytes)) {
+                    if (password.isEmpty()) {
+                        throw com.mrrob.llmchat.data.Vault.VaultException(
+                            "This backup is password-protected - enter its password."
+                        )
+                    }
                     com.mrrob.llmchat.data.Vault.decrypt(bytes, password)
                 } else {
                     String(bytes, Charsets.UTF_8)
