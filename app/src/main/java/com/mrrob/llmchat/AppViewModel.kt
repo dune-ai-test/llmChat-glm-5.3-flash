@@ -676,6 +676,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /**
+     * Creates a file inside a tree folder. Tries the public DocumentsContract
+     * API on the canonicalized URI; if the framework parser still chokes
+     * ("Invalid URI"), calls the provider directly with manually built URIs
+     * and the stable IPC string constants - mirroring what DocumentsContract
+     * does internally, minus its fragile segment parsing.
+     */
+    private fun createInFolder(
+        resolver: android.content.ContentResolver,
+        treeUri: android.net.Uri,
+        displayName: String
+    ): android.net.Uri {
+        val canonical = canonicalTreeUri(treeUri)
+        runCatching {
+            android.provider.DocumentsContract.createDocument(
+                resolver, canonical, "application/octet-stream", displayName
+            )
+        }.getOrNull()?.let { return it }
+        val docId = treeDocId(canonical)
+            ?: throw IllegalStateException("bad folder URI")
+        val enc = android.net.Uri.encode(docId)
+        val authority = canonical.authority ?: throw IllegalStateException("bad folder URI")
+        val parentDocUri = "content://$authority/document/$enc"
+        val args = android.os.Bundle().apply {
+            putString("android.provider.extra.PARENT_URI", parentDocUri)
+            putString("display_name", displayName)
+            putString("mime_type", "application/octet-stream")
+        }
+        val result = resolver.call(
+            android.net.Uri.parse(parentDocUri), "android.provider.CREATE_DOCUMENT", null, args
+        ) ?: throw IllegalStateException("folder rejects new files")
+        val created = result.getString("android.provider.extra.RESULT")
+            ?: throw IllegalStateException("folder rejects new files")
+        return android.net.Uri.parse(created)
+    }
+
     /** Stores a persistable tree URI so exports never ask again - after probing it. */
     fun setExportFolder(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -687,10 +723,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                     )
                 }
-                val probe = android.provider.DocumentsContract.createDocument(
-                    appContext.contentResolver, canonicalTreeUri(uri),
-                    "application/octet-stream", "aster-probe.tmp"
-                ) ?: throw IllegalStateException("folder rejects new files")
+                val probe = createInFolder(
+                    appContext.contentResolver, uri, "aster-probe.tmp"
+                )
                 runCatching {
                     android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, probe)
                 }
@@ -716,7 +751,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 } else {
                     DataOp.Done(
-                        "That folder can't store files (${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
+                        "That folder can't store files (build ${com.mrrob.llmchat.BuildConfig.VERSION_NAME}: " +
+                            "${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
                             "Pick a regular folder, e.g. Documents."
                     )
                 }
@@ -735,9 +771,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
                     .format(java.util.Date())
                 val name = "aster-backup-$stamp.llm"
-                val doc = android.provider.DocumentsContract.createDocument(
-                    appContext.contentResolver, tree, "application/octet-stream", name
-                ) ?: throw IllegalStateException("folder rejected the new file")
+                val doc = createInFolder(appContext.contentResolver, tree, name)
                 appContext.contentResolver.openOutputStream(doc)?.use { out ->
                     out.write(bytes)
                     out.flush()
@@ -914,9 +948,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val resolver = appContext.contentResolver
                 val ok = runCatching {
                     val name = "aster-auto-$today.llm"
-                    val doc = android.provider.DocumentsContract.createDocument(
-                        resolver, tree, "application/octet-stream", name
-                    ) ?: return@runCatching false
+                    val doc = createInFolder(resolver, tree, name)
                     resolver.openOutputStream(doc)?.use { out ->
                         out.write(bytes)
                         out.flush()
