@@ -212,12 +212,16 @@ fun highlightText(text: String, query: String): AnnotatedString {
 }
 
 /** Time-of-day greeting for the home header. */
-fun greeting(): String {
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+fun greeting(): String = greetingFor(System.currentTimeMillis())
+
+/** Greeting for a specific moment - lets the UI re-evaluate as time passes. */
+fun greetingFor(millis: Long): String {
+    val hour = Calendar.getInstance().apply { timeInMillis = millis }
+        .get(Calendar.HOUR_OF_DAY)
     return when {
         hour < 5 -> "Good night"
         hour < 12 -> "Good morning"
-        hour < 18 -> "Good afternoon"
+        hour < 17 -> "Good afternoon"
         else -> "Good evening"
     }
 }

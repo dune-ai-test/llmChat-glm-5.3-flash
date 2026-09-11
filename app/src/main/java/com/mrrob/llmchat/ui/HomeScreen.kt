@@ -25,6 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,26 +75,10 @@ fun HomeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
-        // Fixed two-line top bar: greeting + user name; avatar opens Settings
-        Column(modifier = Modifier.fillMaxWidth().background(c.bg)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
-                ) {
-                    Text(greeting(), style = t.largeTitle, color = c.textPrimary, maxLines = 1)
-                    Text(
-                        settings.displayName.ifBlank { "there" },
-                        style = t.caption.copy(fontSize = 14.sp, lineHeight = 18.sp),
-                        color = c.textSecondary,
-                        maxLines = 1
-                    )
-                }
+        // Fixed top bar: app name + avatar (opens Settings)
+        ScreenTopBar(
+            title = "Aster",
+            actions = {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -114,23 +99,31 @@ fun HomeScreen(
                     )
                 }
             }
-            Box(Modifier.fillMaxWidth().height(0.7.dp).background(c.border))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(12.dp)
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(
-                                if (c.dark) androidx.compose.ui.graphics.Color(0x2E000000)
-                                else androidx.compose.ui.graphics.Color(0x14000000),
-                                androidx.compose.ui.graphics.Color(0x00000000)
-                            )
-                        )
-                    )
+        )
+
+        // Greeting under the top bar - re-evaluates every minute so it shifts
+        // from "Good morning" to "Good afternoon"/"Good evening" while open.
+        var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(60_000)
+                nowMillis = System.currentTimeMillis()
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            Text(greetingFor(nowMillis), style = t.largeTitle, color = c.textPrimary, maxLines = 1)
+            Text(
+                settings.displayName.ifBlank { "there" },
+                style = t.caption.copy(fontSize = 14.sp, lineHeight = 18.sp),
+                color = c.textSecondary,
+                maxLines = 1
             )
         }
-
         if (!online) {
             Row(
                 modifier = Modifier
