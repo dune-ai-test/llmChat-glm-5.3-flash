@@ -92,6 +92,9 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     var showLog by remember { mutableStateOf(false) }
     var showExportPassword by remember { mutableStateOf(false) }
     var showImportPassword by remember { mutableStateOf(false) }
+    var pwSetForExport by remember { mutableStateOf(false) }
+    val backupPwSet by app.backupPasswordSet.collectAsStateWithLifecycle()
+    val autoStatus by app.autoBackupStatus.collectAsStateWithLifecycle()
     var importReason by remember { mutableStateOf<String?>(null) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
 
@@ -106,7 +109,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     LaunchedEffect(exportBytes) {
         if (exportBytes != null) {
             if (settings.exportFolderUri.isNotBlank()) app.writeExportToFolder()
-            else exportLauncher.launch("aster-backup.json")
+            else exportLauncher.launch("aster-backup.llm")
         }
     }
 
@@ -115,10 +118,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     ) { uri ->
         if (uri != null) {
             app.pendingImportUri = uri
-            importReason =
-                "Enter the password you chose when exporting this backup. " +
-                    "Leave it blank if the backup has no password."
-            showImportPassword = true
+            app.importBackupAuto(uri)
         }
     }
 
@@ -136,7 +136,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
             }
             is AppViewModel.DataOp.NeedSheet -> {
                 resultMessage = op.reason
-                exportLauncher.launch("aster-backup.json")
+                exportLauncher.launch("aster-backup.llm")
             }
             is AppViewModel.DataOp.Done -> {
                 resultMessage = op.message
@@ -300,8 +300,14 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                 AsterRow(
                     label = "Export encrypted backup",
                     icon = IconsL.download,
-                    description = "Chats, connections and keys - locked with a password.",
-                    onClick = { showExportPassword = true }
+                    description = "Chats, connections and keys - locked with your backup password.",
+                    onClick = {
+                        if (backupPwSet) app.prepareExport()
+                        else {
+                            pwSetForExport = true
+                            showExportPassword = true
+                        }
+                    }
                 )
                 CardDivider()
                 AsterRow(label = "Import backup", icon = IconsL.arrowSwap, onClick = { importLauncher.launch(arrayOf("*/*")) })
@@ -311,6 +317,30 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
                     icon = IconsL.folder,
                     value = folderDisplayName(settings.exportFolderUri) ?: "Ask each time",
                     onClick = { treeLauncher.launch(null) }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Backup password",
+                    icon = IconsL.lock,
+                    value = if (backupPwSet) "Set" else "Not set",
+                    onClick = {
+                        pwSetForExport = false
+                        showExportPassword = true
+                    }
+                )
+                CardDivider()
+                AsterRow(
+                    label = "Auto backup",
+                    icon = IconsL.timer,
+                    description = autoStatus.ifBlank {
+                        "One encrypted snapshot per day in your export folder - newest 7 kept."
+                    },
+                    onClick = {
+                        if (!backupPwSet) {
+                            pwSetForExport = false
+                            showExportPassword = true
+                        } else treeLauncher.launch(null)
+                    }
                 )
                 CardDivider()
                 AsterRow(label = "Reset settings", icon = IconsL.refresh, onClick = { resetConfirm = true })
@@ -362,13 +392,16 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
 
     if (showExportPassword) {
         PasswordDialog(
-            title = "Choose a backup password",
-            reason = "The file is encrypted before it leaves the app. A forgotten password cannot be recovered.",
-            confirmLabel = "Export",
+            title = if (backupPwSet) "Change backup password" else "Set backup password",
+            reason = "Saved on this device only - exports and daily auto backups use it without " +
+                "asking again. A forgotten password cannot be recovered.",
+            confirmLabel = "Save",
+            requireConfirm = true,
             onDismiss = { showExportPassword = false },
             onConfirm = { pwd ->
                 showExportPassword = false
-                app.prepareExport(pwd)
+                app.setBackupPassword(pwd)
+                if (pwSetForExport) app.prepareExport()
             }
         )
     }
@@ -451,6 +484,7 @@ private fun PasswordDialog(
     reason: String,
     confirmLabel: String,
     allowEmpty: Boolean = false,
+    requireConfirm: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
@@ -458,7 +492,7 @@ private fun PasswordDialog(
     val t = LocalType.current
     var pwd by remember { mutableStateOf("") }
     var pwd2 by remember { mutableStateOf("") }
-    val valid = (allowEmpty || pwd.length >= 4) && (confirmLabel != "Export" || pwd == pwd2)
+    val valid = (allowEmpty || pwd.length >= 4) && (!requireConfirm || pwd == pwd2)
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.card,
@@ -467,7 +501,7 @@ private fun PasswordDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(reason, style = t.desc, color = c.textSecondary)
                 LockedField("Password", pwd) { pwd = it }
-                if (confirmLabel == "Export") {
+                if (requireConfirm) {
                     LockedField("Confirm password", pwd2) { pwd2 = it }
                     if (pwd2.isNotEmpty() && pwd != pwd2) {
                         Text("Passwords do not match.", style = t.caption, color = c.danger)

@@ -114,6 +114,9 @@ fun AsterRoot(app: AsterApp) {
             }
         }
 
+        // Daily automatic backup check - silent, needs the backup password + export folder.
+        LaunchedEffect(vm) { vm.maybeAutoBackup() }
+
         AsterNavigation(vm)
     }
 }

@@ -614,14 +614,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val exportBytes: StateFlow<ByteArray?> = _exportBytes.asStateFlow()
     fun consumeExportBytes() { _exportBytes.value = null }
 
-    fun prepareExport(password: String) {
+    private val _backupPasswordSet = MutableStateFlow(settingsStore.backupPassword().isNotEmpty())
+    val backupPasswordSet: StateFlow<Boolean> = _backupPasswordSet.asStateFlow()
+
+    fun setBackupPassword(pwd: String) {
+        settingsStore.setBackupPassword(pwd)
+        _backupPasswordSet.value = pwd.isNotEmpty()
+        refreshAutoBackupStatus()
+    }
+
+    /** Encrypts all data with the stored backup password and stages the bytes. */
+    fun prepareExport() {
         viewModelScope.launch {
             _dataOp.value = DataOp.Running("Encrypting\u2026")
             try {
+                val password = settingsStore.backupPassword()
+                if (password.isEmpty()) {
+                    throw com.mrrob.llmchat.data.Vault.VaultException(
+                        "Set a backup password first - it is saved on this device and reused silently."
+                    )
+                }
                 val json = repo.exportJson()
                 val bytes = com.mrrob.llmchat.data.Vault.encrypt(json, password)
                 _dataOp.value = DataOp.Idle
                 _exportBytes.value = bytes
+            } catch (e: com.mrrob.llmchat.data.Vault.VaultException) {
+                _dataOp.value = DataOp.Done(e.message ?: "Set a backup password first.")
             } catch (e: Exception) {
                 _dataOp.value = DataOp.Done("Export failed: ${e.message}")
             }
@@ -650,6 +668,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }.getOrDefault(false)
             if (usable) {
                 updateSettings { it.copy(exportFolderUri = uri.toString()) }
+                refreshAutoBackupStatus()
                 _dataOp.value = DataOp.Done("Export folder set - backups save there automatically.")
             } else {
                 _dataOp.value = DataOp.Done(
@@ -670,7 +689,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val result = runCatching {
                 val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
                     .format(java.util.Date())
-                val name = "aster-backup-$stamp.json"
+                val name = "aster-backup-$stamp.llm"
                 val doc = android.provider.DocumentsContract.createDocument(
                     appContext.contentResolver, tree, "application/octet-stream", name
                 ) ?: throw IllegalStateException("folder rejected the new file")
@@ -750,20 +769,147 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     String(bytes, Charsets.UTF_8)
                 }
-                val r = repo.importJson(json)
-                _dataOp.value = when (r) {
-                    is AppRepository.ImportResult.Success -> DataOp.Done(
-                        "Imported ${r.conversations} conversation${if (r.conversations == 1) "" else "s"}" +
-                            if (r.connections > 0) " and ${r.connections} connection${if (r.connections == 1) "" else "s"}." else "."
-                    )
-                    is AppRepository.ImportResult.Failure -> DataOp.Done(r.reason)
-                }
+                emitImport(repo.importJson(json))
             } catch (e: com.mrrob.llmchat.data.Vault.VaultException) {
                 _dataOp.value = DataOp.NeedPassword(e.message ?: "Password required.")
             } catch (e: Exception) {
                 _dataOp.value = DataOp.Done("Import failed: ${e.message}")
             }
         }
+    }
+
+    private fun emitImport(r: AppRepository.ImportResult) {
+        _dataOp.value = when (r) {
+            is AppRepository.ImportResult.Success -> DataOp.Done(
+                "Imported ${r.conversations} conversation${if (r.conversations == 1) "" else "s"}" +
+                    if (r.connections > 0) " and ${r.connections} connection${if (r.connections == 1) "" else "s"}." else "."
+            )
+            is AppRepository.ImportResult.Failure -> DataOp.Done(r.reason)
+        }
+    }
+
+    /**
+     * File-pick path: a vault is first tried with the device's stored backup
+     * password (silent restore of our own files); the UI only prompts when
+     * that fails or no password exists yet. Plain JSON imports straight away.
+     */
+    fun importBackupAuto(uri: android.net.Uri) {
+        runCatching {
+            appContext.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _dataOp.value = DataOp.Running("Importing\u2026")
+            try {
+                val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IllegalStateException("Could not read the file.")
+                val json = if (com.mrrob.llmchat.data.Vault.isVault(bytes)) {
+                    val stored = settingsStore.backupPassword()
+                    if (stored.isEmpty()) {
+                        throw com.mrrob.llmchat.data.Vault.VaultException(
+                            "This backup is password-protected - enter the password you used when exporting it."
+                        )
+                    }
+                    try {
+                        com.mrrob.llmchat.data.Vault.decrypt(bytes, stored)
+                    } catch (ve: com.mrrob.llmchat.data.Vault.VaultException) {
+                        throw ve
+                    } catch (e: Exception) {
+                        throw com.mrrob.llmchat.data.Vault.VaultException(
+                            "The backup could not be unlocked with this device's password - enter its password."
+                        )
+                    }
+                } else {
+                    String(bytes, Charsets.UTF_8)
+                }
+                emitImport(repo.importJson(json))
+            } catch (e: com.mrrob.llmchat.data.Vault.VaultException) {
+                _dataOp.value = DataOp.NeedPassword(e.message ?: "Password required.")
+            } catch (e: Exception) {
+                _dataOp.value = DataOp.Done("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    // ── Daily automatic backup (needs the backup password + an export folder) ──
+
+    private val _autoBackupStatus = MutableStateFlow("")
+    val autoBackupStatus: StateFlow<String> = _autoBackupStatus.asStateFlow()
+
+    private fun refreshAutoBackupStatus() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _autoBackupStatus.value = autoBackupStatusNow()
+        }
+    }
+
+    private fun autoBackupStatusNow(): String = when {
+        settingsStore.backupPassword().isEmpty() -> "Off - set a backup password to enable."
+        settings.value.exportFolderUri.isBlank() -> "Off - choose an export folder first."
+        else -> {
+            val last = settingsStore.prefsString("last_auto_backup")
+            if (last.isEmpty()) "On - first run will create today's backup." else "On - last backup $last."
+        }
+    }
+
+    /** One encrypted snapshot per calendar day, newest 7 auto files kept. */
+    fun maybeAutoBackup() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                _autoBackupStatus.value = autoBackupStatusNow()
+                val password = settingsStore.backupPassword()
+                val treeStr = settings.value.exportFolderUri
+                if (password.isEmpty() || treeStr.isBlank()) return@launch
+                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date())
+                if (settingsStore.prefsString("last_auto_backup") == today) return@launch
+                val json = repo.exportJson()
+                val bytes = com.mrrob.llmchat.data.Vault.encrypt(json, password)
+                val tree = android.net.Uri.parse(treeStr)
+                val resolver = appContext.contentResolver
+                val ok = runCatching {
+                    val name = "aster-auto-$today.llm"
+                    val doc = android.provider.DocumentsContract.createDocument(
+                        resolver, tree, "application/octet-stream", name
+                    ) ?: return@runCatching false
+                    resolver.openOutputStream(doc)?.use { out ->
+                        out.write(bytes)
+                        out.flush()
+                    } ?: return@runCatching false
+                    val files = settingsStore.prefsString("auto_backup_files")
+                        .lineSequence().filter { it.isNotBlank() }.toMutableList()
+                    files += name
+                    settingsStore.prefsPutString("auto_backup_files", files.joinToString("\n"))
+                    settingsStore.prefsPutString("last_auto_backup", today)
+                    pruneAutoBackups(tree, resolver)
+                    true
+                }.getOrDefault(false)
+                _autoBackupStatus.value = autoBackupStatusNow()
+                if (!ok) {
+                    _autoBackupStatus.value =
+                        "On - today's backup could not be written (check the export folder)."
+                }
+            } catch (e: Exception) {
+                // Auto backup is silent by contract: it never dialogs, never blocks startup.
+                android.util.Log.w("Aster", "auto backup failed", e)
+            }
+        }
+    }
+
+    private fun pruneAutoBackups(
+        tree: android.net.Uri,
+        resolver: android.content.ContentResolver
+    ) {
+        val files = settingsStore.prefsString("auto_backup_files")
+            .lineSequence().filter { it.isNotBlank() }.toMutableList()
+        while (files.size > 7) {
+            val old = files.removeAt(0)
+            runCatching {
+                val doc = android.provider.DocumentsContract.findDocument(resolver, tree, old)
+                if (doc != null) android.provider.DocumentsContract.deleteDocument(resolver, doc)
+            }
+        }
+        settingsStore.prefsPutString("auto_backup_files", files.joinToString("\n"))
     }
 
     sealed class DataOp {

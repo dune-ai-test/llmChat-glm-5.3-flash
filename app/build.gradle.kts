@@ -13,8 +13,8 @@ android {
         applicationId = "com.mrrob.llmchat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.2.3"
+        versionCode = 6
+        versionName = "1.2.4"
     }
 
     signingConfigs {

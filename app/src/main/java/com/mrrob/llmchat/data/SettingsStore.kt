@@ -190,6 +190,16 @@ class SettingsStore(context: Context) {
         runCatching { secrets?.edit()?.remove("key_$connectionId")?.apply() }
     }
 
+    // ── Backup password (set once; exports and daily auto-backups use it) ─────
+
+    fun backupPassword(): String = runCatching {
+        secrets?.getString("backup_pw", "").orEmpty()
+    }.getOrDefault("")
+
+    fun setBackupPassword(password: String) {
+        runCatching { secrets?.edit()?.putString("backup_pw", password)?.apply() }
+    }
+
     fun clearAll() {
         prefs.edit().clear().apply()
         secrets?.edit()?.clear()?.apply()
