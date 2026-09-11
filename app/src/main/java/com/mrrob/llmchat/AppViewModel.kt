@@ -647,6 +647,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Writes the staged bytes while the SAF write grant is definitely alive. */
+    // ── Tree URI helpers (DocumentsContract's own parser rejects some picker
+    //    URIs for nested folders with "Invalid URI", so we decode the raw path
+    //    ourselves and talk to the provider directly) ─────────────────────────
+
+    /** Document id of a tree URI in any shape: tree/<enc>, tree/<enc>/document/<enc>,
+     *  or the OEM form with raw slashes (tree/primary%3ADocs/sub). */
+    private fun treeDocId(uri: android.net.Uri): String? {
+        val raw = uri.encodedPath ?: return null
+        val segs = raw.trimStart('/').split('/')
+        if (segs.isEmpty() || android.net.Uri.decode(segs.first()) != "tree") return null
+        val docIdx = segs.indexOfFirst { android.net.Uri.decode(it) == "document" }
+        val rest = if (docIdx >= 0) segs.drop(docIdx + 1) else segs.drop(1)
+        if (rest.isEmpty()) return null
+        return rest.joinToString("/") { android.net.Uri.decode(it) }
+    }
+
+    /** createDocument equivalent that never parses the tree URI via DocumentsContract. */
+    private fun createInTree(
+        resolver: android.content.ContentResolver,
+        treeUri: android.net.Uri,
+        mimeType: String,
+        displayName: String
+    ): android.net.Uri? {
+        val docId = treeDocId(treeUri) ?: return null
+        val parentDoc = android.provider.DocumentsContract.buildDocumentUri(treeUri.authority, docId)
+        val args = android.os.Bundle().apply {
+            putString(
+                android.provider.DocumentsContract.EXTRA_PARENT_URI,
+                parentDoc.toString()
+            )
+            putString(android.provider.DocumentsContract.Document.DISPLAY_NAME, displayName)
+            putString(android.provider.DocumentsContract.Document.MIME_TYPE, mimeType)
+        }
+        val result = runCatching {
+            resolver.call(
+                parentDoc,
+                android.provider.DocumentsContract.METHOD_CREATE_DOCUMENT,
+                null,
+                args
+            )
+        }.getOrNull() ?: return null
+        val created = result.getString(android.provider.DocumentsContract.EXTRA_RESULT) ?: return null
+        return android.net.Uri.parse(created)
+    }
+
+    /** Children URI of a tree, built from the decoded doc id (no DocumentsContract parsing). */
+    private fun childDocsUri(treeUri: android.net.Uri): android.net.Uri? {
+        val docId = treeDocId(treeUri) ?: return null
+        return android.net.Uri.parse(
+            "content://${treeUri.authority}/tree/${android.net.Uri.encode(docId)}/children"
+        )
+    }
+
     /** Stores a persistable tree URI so exports never ask again - after probing it. */
     fun setExportFolder(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -658,7 +711,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                     )
                 }
-                val probe = android.provider.DocumentsContract.createDocument(
+                val probe = createInTree(
                     appContext.contentResolver, uri, "application/octet-stream", "aster-probe.tmp"
                 ) ?: throw IllegalStateException("folder rejects new files")
                 runCatching {
@@ -675,7 +728,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // creation on most devices - name that case explicitly.
                 val volume = runCatching {
                     if (uri.authority == "com.android.externalstorage.documents")
-                        android.provider.DocumentsContract.getTreeDocumentId(uri).substringBefore(":")
+                        (treeDocId(uri) ?: "").substringBefore(":")
                     else ""
                 }.getOrDefault("")
                 _dataOp.value = if (volume.isNotEmpty() && volume != "primary") {
@@ -705,7 +758,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
                     .format(java.util.Date())
                 val name = "aster-backup-$stamp.llm"
-                val doc = android.provider.DocumentsContract.createDocument(
+                val doc = createInTree(
                     appContext.contentResolver, tree, "application/octet-stream", name
                 ) ?: throw IllegalStateException("folder rejected the new file")
                 appContext.contentResolver.openOutputStream(doc)?.use { out ->
@@ -884,7 +937,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val resolver = appContext.contentResolver
                 val ok = runCatching {
                     val name = "aster-auto-$today.llm"
-                    val doc = android.provider.DocumentsContract.createDocument(
+                    val doc = createInTree(
                         resolver, tree, "application/octet-stream", name
                     ) ?: return@runCatching false
                     resolver.openOutputStream(doc)?.use { out ->
@@ -920,9 +973,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         while (files.size > 7) {
             val old = files.removeAt(0)
             runCatching {
-                val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
-                    tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
-                )
+                val children = childDocsUri(tree) ?: return@runCatching
                 val doc = resolver.query(
                     children,
                     arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
