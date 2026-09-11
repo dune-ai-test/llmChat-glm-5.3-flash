@@ -671,10 +671,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 refreshAutoBackupStatus()
                 _dataOp.value = DataOp.Done("Export folder set - backups save there automatically.")
             } else {
-                _dataOp.value = DataOp.Done(
-                    "That folder can't store files (${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
-                        "Pick a regular folder, e.g. Documents."
-                )
+                // USB/SD volumes ("home:", "public:", ...) reject SAF document
+                // creation on most devices - name that case explicitly.
+                val volume = runCatching {
+                    if (uri.authority == "com.android.externalstorage.documents")
+                        android.provider.DocumentsContract.getTreeDocumentId(uri).substringBefore(":")
+                    else ""
+                }.getOrDefault("")
+                _dataOp.value = if (volume.isNotEmpty() && volume != "primary") {
+                    DataOp.Done(
+                        "USB drives and SD cards can't accept new files from apps on most phones. " +
+                            "Pick a folder in phone storage, e.g. Documents - then move the backup " +
+                            "to the drive with your file manager."
+                    )
+                } else {
+                    DataOp.Done(
+                        "That folder can't store files (${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
+                            "Pick a regular folder, e.g. Documents."
+                    )
+                }
             }
         }
     }
