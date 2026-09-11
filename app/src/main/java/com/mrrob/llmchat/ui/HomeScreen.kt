@@ -74,10 +74,26 @@ fun HomeScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(c.bg)) {
-        // Fixed top bar: app name + avatar (opens Settings)
-        ScreenTopBar(
-            title = "Aster",
-            actions = {
+        // Fixed two-line top bar: greeting + user name; avatar opens Settings
+        Column(modifier = Modifier.fillMaxWidth().background(c.bg)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    Text(greeting(), style = t.largeTitle, color = c.textPrimary, maxLines = 1)
+                    Text(
+                        settings.displayName.ifBlank { "there" },
+                        style = t.caption.copy(fontSize = 14.sp, lineHeight = 18.sp),
+                        color = c.textSecondary,
+                        maxLines = 1
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -98,7 +114,22 @@ fun HomeScreen(
                     )
                 }
             }
-        )
+            Box(Modifier.fillMaxWidth().height(0.7.dp).background(c.border))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(12.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                if (c.dark) androidx.compose.ui.graphics.Color(0x2E000000)
+                                else androidx.compose.ui.graphics.Color(0x14000000),
+                                androidx.compose.ui.graphics.Color(0x00000000)
+                            )
+                        )
+                    )
+            )
+        }
 
         if (!online) {
             Row(
