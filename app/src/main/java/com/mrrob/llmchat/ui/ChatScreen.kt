@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -673,10 +674,12 @@ private fun MessageRow(
                                     )
                                 )
                                 .background(c.accent)
-                                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                                .combinedClickable(onClick = onLongPress, onLongClick = onLongPress)
                                 .padding(horizontal = d.bubbleH, vertical = d.bubbleV)
                         ) {
-                            Text(message.text, style = t.body, color = Color.White)
+                            SelectionContainer {
+                                Text(message.text, style = t.body, color = Color.White)
+                            }
                         }
                     }
                 }
@@ -693,11 +696,13 @@ private fun MessageRow(
                 .combinedClickable(onClick = onToggleDetails, onLongClick = onLongPress),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            MarkdownText(
-                source = message.text,
-                streaming = false,
-                showCodeLineNumbers = vm.showCodeLineNumbers()
-            )
+            SelectionContainer {
+                MarkdownText(
+                    source = message.text,
+                    streaming = false,
+                    showCodeLineNumbers = vm.showCodeLineNumbers()
+                )
+            }
             if (expandedDetails) {
                 val parts = buildList {
                     if (message.tokensIn >= 0) add("${message.tokensIn} in")

@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -512,16 +513,18 @@ private fun VoiceBubble(
     val t = LocalType.current
     if (message.role == "user") {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(
-                message.text,
-                style = t.bodyTight,
-                color = Color.White,
-                modifier = Modifier
-                    .widthIn(max = 225.dp)
-                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp))
-                    .background(c.accent)
-                    .padding(horizontal = 15.dp, vertical = 11.dp)
-            )
+            SelectionContainer {
+                Text(
+                    message.text,
+                    style = t.bodyTight,
+                    color = Color.White,
+                    modifier = Modifier
+                        .widthIn(max = 225.dp)
+                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp))
+                        .background(c.accent)
+                        .padding(horizontal = 15.dp, vertical = 11.dp)
+                )
+            }
         }
     } else if (message.role == "assistant") {
         Column(
@@ -529,22 +532,24 @@ private fun VoiceBubble(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                Text(
-                    message.text,
-                    style = t.bodyTight,
-                    color = c.textPrimary,
-                    modifier = Modifier
-                        .widthIn(max = 235.dp)
+                SelectionContainer {
+                    Text(
+                        message.text,
+                        style = t.bodyTight,
+                        color = c.textPrimary,
+                        modifier = Modifier
+                            .widthIn(max = 235.dp)
                         .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
                         .background(c.card)
-                        .border(1.dp, c.border, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onToggle
-                        )
-                        .padding(horizontal = 15.dp, vertical = 11.dp)
-                )
+                            .border(1.dp, c.border, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onToggle
+                            )
+                            .padding(horizontal = 15.dp, vertical = 11.dp)
+                    )
+                }
             }
             if (expanded) {
                 val parts = buildList {
