@@ -13,7 +13,7 @@ build/
 tools/
 *.py
 __pycache__/
-ui/
+/ui/
 
 # release signing material (written by CI only)
 *.keystore
