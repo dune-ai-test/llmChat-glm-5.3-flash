@@ -308,6 +308,7 @@ fun ChatScreen(
             if (messages.isEmpty() && streaming == null && !generating) {
                 EmptyChat(onPick = { prompt -> input = prompt })
             } else {
+                SelectionContainer {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -367,6 +368,7 @@ fun ChatScreen(
                             )
                         }
                     }
+                }
                 }
             }
 
@@ -677,9 +679,7 @@ private fun MessageRow(
                                 .combinedClickable(onClick = onLongPress, onLongClick = onLongPress)
                                 .padding(horizontal = d.bubbleH, vertical = d.bubbleV)
                         ) {
-                            SelectionContainer {
-                                Text(message.text, style = t.body, color = Color.White)
-                            }
+                            Text(message.text, style = t.body, color = Color.White)
                         }
                     }
                 }
@@ -696,13 +696,11 @@ private fun MessageRow(
                 .combinedClickable(onClick = onToggleDetails, onLongClick = onLongPress),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SelectionContainer {
-                MarkdownText(
-                    source = message.text,
-                    streaming = false,
-                    showCodeLineNumbers = vm.showCodeLineNumbers()
-                )
-            }
+            MarkdownText(
+                source = message.text,
+                streaming = false,
+                showCodeLineNumbers = vm.showCodeLineNumbers()
+            )
             if (expandedDetails) {
                 val parts = buildList {
                     if (message.tokensIn >= 0) add("${message.tokensIn} in")

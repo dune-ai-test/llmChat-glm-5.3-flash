@@ -257,6 +257,7 @@ fun VoiceScreen(
 
         // ── Transcript panel ───────────────────────────────────────────────────
         if (showTranscript) {
+            SelectionContainer {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -289,6 +290,7 @@ fun VoiceScreen(
                 if (phase == VoiceViewModel.Phase.PROCESSING) {
                     item { SkeletonBubble() }
                 }
+            }
             }
         } else {
             Column(
@@ -513,18 +515,16 @@ private fun VoiceBubble(
     val t = LocalType.current
     if (message.role == "user") {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            SelectionContainer {
-                Text(
-                    message.text,
-                    style = t.bodyTight,
-                    color = Color.White,
-                    modifier = Modifier
-                        .widthIn(max = 225.dp)
-                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp))
-                        .background(c.accent)
-                        .padding(horizontal = 15.dp, vertical = 11.dp)
-                )
-            }
+            Text(
+                message.text,
+                style = t.bodyTight,
+                color = Color.White,
+                modifier = Modifier
+                    .widthIn(max = 225.dp)
+                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp))
+                    .background(c.accent)
+                    .padding(horizontal = 15.dp, vertical = 11.dp)
+            )
         }
     } else if (message.role == "assistant") {
         Column(
@@ -532,24 +532,22 @@ private fun VoiceBubble(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                SelectionContainer {
-                    Text(
-                        message.text,
-                        style = t.bodyTight,
-                        color = c.textPrimary,
-                        modifier = Modifier
-                            .widthIn(max = 235.dp)
+                Text(
+                    message.text,
+                    style = t.bodyTight,
+                    color = c.textPrimary,
+                    modifier = Modifier
+                        .widthIn(max = 235.dp)
                         .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
                         .background(c.card)
-                            .border(1.dp, c.border, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = onToggle
-                            )
-                            .padding(horizontal = 15.dp, vertical = 11.dp)
-                    )
-                }
+                        .border(1.dp, c.border, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onToggle
+                        )
+                        .padding(horizontal = 15.dp, vertical = 11.dp)
+                )
             }
             if (expanded) {
                 val parts = buildList {
