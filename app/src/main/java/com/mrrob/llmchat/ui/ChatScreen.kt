@@ -184,8 +184,10 @@ fun ChatScreen(
                         }
                     }
                 ) { change, amount ->
-                    if (amount > 0) total += amount
-                    change.consume()
+                    if (amount > 0 && !change.positionChangeConsumed()) {
+                        total += amount
+                        change.consume()
+                    }
                 }
             }
     ) {

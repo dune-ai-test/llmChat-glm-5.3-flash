@@ -343,6 +343,10 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
 
     val drawerOpener: (() -> Unit)? =
         if (drawerMode) { { uiScope.launch { drawerState.open() } } } else null
+    androidx.activity.compose.BackHandler(
+        enabled = drawerMode && drawerState.currentValue == androidx.compose.material3.DrawerValue.Open
+    ) { uiScope.launch { drawerState.close() } }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -353,7 +357,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
         ) {
             androidx.compose.material3.ModalNavigationDrawer(
                 drawerState = drawerState,
-                gesturesEnabled = false,
+                gesturesEnabled = drawerMode,
                 drawerContent = {
                     if (drawerMode) {
                         AsterDrawer(

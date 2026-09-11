@@ -216,16 +216,6 @@ fun VoiceScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
-            .pointerInput(Unit) {
-                var total = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { total = 0f },
-                    onDragEnd = { if (total > 120f) onExit() }
-                ) { change, amount ->
-                    if (amount > 0) total += amount
-                    change.consume()
-                }
-            }
     ) {
         LaunchedEffect(pendingVoice) {
             pendingVoice?.let { id ->
