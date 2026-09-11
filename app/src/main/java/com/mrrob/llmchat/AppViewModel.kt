@@ -689,11 +689,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         displayName: String
     ): android.net.Uri {
         val canonical = canonicalTreeUri(treeUri)
+        val why = StringBuilder()
         runCatching {
             android.provider.DocumentsContract.createDocument(
                 resolver, canonical, "application/octet-stream", displayName
             )
-        }.getOrNull()?.let { return it }
+        }.fold(
+            onSuccess = { doc -> doc?.let { return it } ?: why.append("public=null; ") },
+            onFailure = { why.append("public=${it.javaClass.simpleName}:${it.message}; ") }
+        )
         val docId = treeDocId(canonical)
             ?: throw IllegalStateException("bad folder URI")
         val enc = android.net.Uri.encode(docId)
@@ -704,23 +708,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             putString("display_name", displayName)
             putString("mime_type", "application/octet-stream")
         }
-        val result = resolver.call(
-            android.net.Uri.parse(parentDocUri), "android.provider.CREATE_DOCUMENT", null, args
-        ) ?: throw IllegalStateException("folder rejects new files")
-        val created = result.getString("android.provider.extra.RESULT")
-            ?: throw IllegalStateException("folder rejects new files")
-        return android.net.Uri.parse(created)
+        runCatching {
+            val result = resolver.call(
+                android.net.Uri.parse(parentDocUri),
+                "android.provider.CREATE_DOCUMENT",
+                null,
+                args
+            )
+            val created = result?.getString("android.provider.extra.RESULT")
+            if (created != null) return android.net.Uri.parse(created)
+            why.append("direct=null-result; ")
+        }.onFailure { why.append("direct=${it.javaClass.simpleName}:${it.message}; ") }
+        throw IllegalStateException(why.toString().ifBlank { "folder rejects new files" })
     }
 
     /** Stores a persistable tree URI so exports never ask again - after probing it. */
     fun setExportFolder(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             val outcome = runCatching {
-                runCatching {
+                val grant = runCatching {
                     appContext.contentResolver.takePersistableUriPermission(
                         uri,
                         android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
                             android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                    )
+                }
+                if (grant.isFailure) {
+                    throw IllegalStateException(
+                        "grant=${grant.exceptionOrNull()?.message ?: "denied"}; "
                     )
                 }
                 val probe = createInFolder(
