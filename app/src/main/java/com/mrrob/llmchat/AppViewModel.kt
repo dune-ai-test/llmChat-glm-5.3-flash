@@ -671,8 +671,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun canonicalTreeUri(uri: android.net.Uri): android.net.Uri {
         val docId = treeDocId(uri) ?: return uri
+        val enc = android.net.Uri.encode(docId)
         return android.net.Uri.parse(
-            "content://${uri.authority}/tree/${android.net.Uri.encode(docId)}"
+            "content://${uri.authority}/tree/$enc/document/$enc"
         )
     }
 
@@ -710,7 +711,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         runCatching {
             val result = resolver.call(
-                android.net.Uri.parse(parentDocUri),
+                canonical,
                 "android.provider.CREATE_DOCUMENT",
                 null,
                 args
@@ -720,6 +721,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             why.append("direct=null-result; ")
         }.onFailure { why.append("direct=${it.javaClass.simpleName}:${it.message}; ") }
         throw IllegalStateException(why.toString().ifBlank { "folder rejects new files" })
+    }
+
+    /** Guaranteed fallback: the system Downloads collection needs no folder grant. */
+    private fun writeToDownloads(bytes: ByteArray, name: String): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 29) return false
+        return runCatching {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            }
+            val uri = appContext.contentResolver.insert(
+                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+            ) ?: return false
+            appContext.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(bytes)
+                out.flush()
+            } ?: return false
+            true
+        }.getOrDefault(false)
     }
 
     /** Stores a persistable tree URI so exports never ask again - after probing it. */
@@ -790,21 +810,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (treeStr.isBlank()) return
         val tree = canonicalTreeUri(android.net.Uri.parse(treeStr))
         viewModelScope.launch(Dispatchers.IO) {
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                .format(java.util.Date())
+            val name = "aster-backup-$stamp.llm"
             val result = runCatching {
-                val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
-                    .format(java.util.Date())
-                val name = "aster-backup-$stamp.llm"
                 val doc = createInFolder(appContext.contentResolver, tree, name)
                 appContext.contentResolver.openOutputStream(doc)?.use { out ->
                     out.write(bytes)
                     out.flush()
                 } ?: throw IllegalStateException("Could not open the file for writing.")
-                name
             }
             if (result.isSuccess) {
                 _exportBytes.value = null
                 _dataOp.value = DataOp.Done(
-                    "Saved \"${result.getOrNull()}\" to your export folder (${bytes.size / 1024} KB, encrypted)."
+                    "Saved \"$name\" to your export folder (${bytes.size / 1024} KB, encrypted)."
+                )
+            } else if (writeToDownloads(bytes, name)) {
+                _exportBytes.value = null
+                _dataOp.value = DataOp.Done(
+                    "Saved \"$name\" to Downloads (${bytes.size / 1024} KB, encrypted) - " +
+                        "your phone blocked the folder."
                 )
             } else {
                 // Folder unusable (e.g. Downloads tree): forget it and use the save sheet instead.
@@ -947,14 +972,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun autoBackupStatusNow(): String = when {
         settingsStore.backupPassword().isEmpty() -> "Off - set a backup password to enable."
-        settings.value.exportFolderUri.isBlank() -> "Off - choose an export folder first."
+        settings.value.exportFolderUri.isBlank() -> "On - saving daily backups to Downloads."
         else -> {
             val want = treeDocId(android.net.Uri.parse(settings.value.exportFolderUri))
             val persisted = appContext.contentResolver.persistedUriPermissions.any {
                 it.isWritePermission && treeDocId(it.uri) == want
             }
             if (!persisted) {
-                "On - but this phone revoked permanent folder access. Re-pick the export folder."
+                "On - this phone blocks permanent folder access; backups go to Downloads."
             } else {
                 val last = settingsStore.prefsString("last_auto_backup")
                 if (last.isEmpty()) "On - first run will create today's backup."
@@ -969,30 +994,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 _autoBackupStatus.value = autoBackupStatusNow()
                 val password = settingsStore.backupPassword()
+                if (password.isEmpty()) return@launch
                 val treeStr = settings.value.exportFolderUri
-                if (password.isEmpty() || treeStr.isBlank()) return@launch
                 val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                     .format(java.util.Date())
                 if (settingsStore.prefsString("last_auto_backup") == today) return@launch
                 val json = repo.exportJson()
                 val bytes = com.mrrob.llmchat.data.Vault.encrypt(json, password)
-                val tree = canonicalTreeUri(android.net.Uri.parse(treeStr))
+                val name = "aster-auto-$today.llm"
                 val resolver = appContext.contentResolver
-                val ok = runCatching {
-                    val name = "aster-auto-$today.llm"
-                    val doc = createInFolder(resolver, tree, name)
-                    resolver.openOutputStream(doc)?.use { out ->
-                        out.write(bytes)
-                        out.flush()
-                    } ?: return@runCatching false
+                val tree = if (treeStr.isNotBlank())
+                    canonicalTreeUri(android.net.Uri.parse(treeStr)) else null
+                val ok = (tree?.let { t ->
+                    runCatching {
+                        val doc = createInFolder(resolver, t, name)
+                        resolver.openOutputStream(doc)?.use { out ->
+                            out.write(bytes)
+                            out.flush()
+                        } ?: return@runCatching false
+                        true
+                    }.getOrDefault(false)
+                } ?: false) || writeToDownloads(bytes, name)
+                if (ok) {
                     val files = settingsStore.prefsString("auto_backup_files")
                         .lineSequence().filter { it.isNotBlank() }.toMutableList()
                     files += name
                     settingsStore.prefsPutString("auto_backup_files", files.joinToString("\n"))
                     settingsStore.prefsPutString("last_auto_backup", today)
                     pruneAutoBackups(tree, resolver)
-                    true
-                }.getOrDefault(false)
+                }
                 _autoBackupStatus.value = autoBackupStatusNow()
                 if (!ok) {
                     _autoBackupStatus.value =
@@ -1006,34 +1036,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun pruneAutoBackups(
-        tree: android.net.Uri,
+        tree: android.net.Uri?,
         resolver: android.content.ContentResolver
     ) {
         val files = settingsStore.prefsString("auto_backup_files")
             .lineSequence().filter { it.isNotBlank() }.toMutableList()
         while (files.size > 7) {
             val old = files.removeAt(0)
-            runCatching {
-                val children = android.provider.DocumentsContract
-                    .buildChildDocumentsUriUsingTree(
-                        tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+            val removedFromFolder = tree?.let { t ->
+                runCatching { pruneFindAndDelete(t, resolver, old) }.getOrDefault(false)
+            } ?: false
+            if (!removedFromFolder && android.os.Build.VERSION.SDK_INT >= 29) {
+                runCatching {
+                    resolver.delete(
+                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        "display_name = ?",
+                        arrayOf(old)
                     )
-                val doc = resolver.query(
-                    children,
-                    arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-                    "${android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME} = ?",
-                    arrayOf(old),
-                    null
-                )?.use { c ->
-                    if (c.moveToFirst()) android.provider.DocumentsContract.buildDocumentUriUsingTree(
-                        tree, c.getString(0)
-                    ) else null
                 }
-                if (doc != null) android.provider.DocumentsContract.deleteDocument(resolver, doc)
             }
         }
         settingsStore.prefsPutString("auto_backup_files", files.joinToString("\n"))
     }
+
+    private fun pruneFindAndDelete(
+        tree: android.net.Uri,
+        resolver: android.content.ContentResolver,
+        old: String
+    ): Boolean = runCatching {
+        val children = android.provider.DocumentsContract
+            .buildChildDocumentsUriUsingTree(
+                tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+            )
+        val doc = resolver.query(
+            children,
+            arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+            "${android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME} = ?",
+            arrayOf(old),
+            null
+        )?.use { c ->
+            if (c.moveToFirst()) android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                tree, c.getString(0)
+            ) else null
+        }
+        if (doc != null) android.provider.DocumentsContract.deleteDocument(resolver, doc)
+        doc != null
+    }.getOrDefault(false)
 
     sealed class DataOp {
         data object Idle : DataOp()
