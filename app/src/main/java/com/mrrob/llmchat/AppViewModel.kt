@@ -663,40 +663,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return rest.joinToString("/") { android.net.Uri.decode(it) }
     }
 
-    /** createDocument equivalent that never parses the tree URI via DocumentsContract. */
-    private fun createInTree(
-        resolver: android.content.ContentResolver,
-        treeUri: android.net.Uri,
-        mimeType: String,
-        displayName: String
-    ): android.net.Uri? {
-        val docId = treeDocId(treeUri) ?: return null
-        val parentDoc = android.provider.DocumentsContract.buildDocumentUri(treeUri.authority, docId)
-        val args = android.os.Bundle().apply {
-            putString(
-                android.provider.DocumentsContract.EXTRA_PARENT_URI,
-                parentDoc.toString()
-            )
-            putString(android.provider.DocumentsContract.Document.DISPLAY_NAME, displayName)
-            putString(android.provider.DocumentsContract.Document.MIME_TYPE, mimeType)
-        }
-        val result = runCatching {
-            resolver.call(
-                parentDoc,
-                android.provider.DocumentsContract.METHOD_CREATE_DOCUMENT,
-                null,
-                args
-            )
-        }.getOrNull() ?: return null
-        val created = result.getString(android.provider.DocumentsContract.EXTRA_RESULT) ?: return null
-        return android.net.Uri.parse(created)
-    }
-
-    /** Children URI of a tree, built from the decoded doc id (no DocumentsContract parsing). */
-    private fun childDocsUri(treeUri: android.net.Uri): android.net.Uri? {
-        val docId = treeDocId(treeUri) ?: return null
+    /**
+     * Some pickers return nested-folder trees with a RAW slash
+     * (tree/primary%3ADocs/sub), which DocumentsContract's parser rejects with
+     * "Invalid URI". Rebuild the canonical single-segment form so every public
+     * DocumentsContract helper accepts it.
+     */
+    private fun canonicalTreeUri(uri: android.net.Uri): android.net.Uri {
+        val docId = treeDocId(uri) ?: return uri
         return android.net.Uri.parse(
-            "content://${treeUri.authority}/tree/${android.net.Uri.encode(docId)}/children"
+            "content://${uri.authority}/tree/${android.net.Uri.encode(docId)}"
         )
     }
 
@@ -711,8 +687,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                     )
                 }
-                val probe = createInTree(
-                    appContext.contentResolver, uri, "application/octet-stream", "aster-probe.tmp"
+                val probe = android.provider.DocumentsContract.createDocument(
+                    appContext.contentResolver, canonicalTreeUri(uri),
+                    "application/octet-stream", "aster-probe.tmp"
                 ) ?: throw IllegalStateException("folder rejects new files")
                 runCatching {
                     android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, probe)
@@ -720,7 +697,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 true
             }
             if (outcome.getOrDefault(false)) {
-                updateSettings { it.copy(exportFolderUri = uri.toString()) }
+                updateSettings { it.copy(exportFolderUri = canonicalTreeUri(uri).toString()) }
                 refreshAutoBackupStatus()
                 _dataOp.value = DataOp.Done("Export folder set - backups save there automatically.")
             } else {
@@ -752,13 +729,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val bytes = _exportBytes.value ?: return
         val treeStr = settings.value.exportFolderUri
         if (treeStr.isBlank()) return
-        val tree = android.net.Uri.parse(treeStr)
+        val tree = canonicalTreeUri(android.net.Uri.parse(treeStr))
         viewModelScope.launch(Dispatchers.IO) {
             val result = runCatching {
                 val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
                     .format(java.util.Date())
                 val name = "aster-backup-$stamp.llm"
-                val doc = createInTree(
+                val doc = android.provider.DocumentsContract.createDocument(
                     appContext.contentResolver, tree, "application/octet-stream", name
                 ) ?: throw IllegalStateException("folder rejected the new file")
                 appContext.contentResolver.openOutputStream(doc)?.use { out ->
@@ -933,11 +910,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (settingsStore.prefsString("last_auto_backup") == today) return@launch
                 val json = repo.exportJson()
                 val bytes = com.mrrob.llmchat.data.Vault.encrypt(json, password)
-                val tree = android.net.Uri.parse(treeStr)
+                val tree = canonicalTreeUri(android.net.Uri.parse(treeStr))
                 val resolver = appContext.contentResolver
                 val ok = runCatching {
                     val name = "aster-auto-$today.llm"
-                    val doc = createInTree(
+                    val doc = android.provider.DocumentsContract.createDocument(
                         resolver, tree, "application/octet-stream", name
                     ) ?: return@runCatching false
                     resolver.openOutputStream(doc)?.use { out ->
@@ -973,7 +950,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         while (files.size > 7) {
             val old = files.removeAt(0)
             runCatching {
-                val children = childDocsUri(tree) ?: return@runCatching
+                val children = android.provider.DocumentsContract
+                    .buildChildDocumentsUriUsingTree(
+                        tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+                    )
                 val doc = resolver.query(
                     children,
                     arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
