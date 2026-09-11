@@ -725,6 +725,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Stores a persistable tree URI so exports never ask again - after probing it. */
     fun setExportFolder(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
+            var grantNote = ""
             val outcome = runCatching {
                 val grant = runCatching {
                     appContext.contentResolver.takePersistableUriPermission(
@@ -734,9 +735,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 if (grant.isFailure) {
-                    throw IllegalStateException(
-                        "grant=${grant.exceptionOrNull()?.message ?: "denied"}; "
-                    )
+                    // Some pickers allow only session grants (0x3) - the live
+                    // grant still permits writes now, so probe anyway.
+                    grantNote = "grant=${grant.exceptionOrNull()?.message ?: "denied"}; "
                 }
                 val probe = createInFolder(
                     appContext.contentResolver, uri, "aster-probe.tmp"
@@ -749,7 +750,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (outcome.getOrDefault(false)) {
                 updateSettings { it.copy(exportFolderUri = canonicalTreeUri(uri).toString()) }
                 refreshAutoBackupStatus()
-                _dataOp.value = DataOp.Done("Export folder set - backups save there automatically.")
+                _dataOp.value = DataOp.Done(
+                    if (grantNote.isEmpty()) {
+                        "Export folder set - backups save there automatically."
+                    } else {
+                        "Export folder set. This phone only grants temporary folder access, " +
+                            "so re-pick it if auto backups stop working."
+                    }
+                )
             } else {
                 // USB/SD volumes ("home:", "public:", ...) reject SAF document
                 // creation on most devices - name that case explicitly.
@@ -767,7 +775,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     DataOp.Done(
                         "That folder can't store files (build ${com.mrrob.llmchat.BuildConfig.VERSION_NAME}: " +
-                            "${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
+                            "$grantNote${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
                             "Pick a regular folder, e.g. Documents."
                     )
                 }
@@ -941,8 +949,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settingsStore.backupPassword().isEmpty() -> "Off - set a backup password to enable."
         settings.value.exportFolderUri.isBlank() -> "Off - choose an export folder first."
         else -> {
-            val last = settingsStore.prefsString("last_auto_backup")
-            if (last.isEmpty()) "On - first run will create today's backup." else "On - last backup $last."
+            val want = treeDocId(android.net.Uri.parse(settings.value.exportFolderUri))
+            val persisted = appContext.contentResolver.persistedUriPermissions.any {
+                it.isWritePermission && treeDocId(it.uri) == want
+            }
+            if (!persisted) {
+                "On - but this phone revoked permanent folder access. Re-pick the export folder."
+            } else {
+                val last = settingsStore.prefsString("last_auto_backup")
+                if (last.isEmpty()) "On - first run will create today's backup."
+                else "On - last backup $last."
+            }
         }
     }
 
@@ -979,7 +996,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _autoBackupStatus.value = autoBackupStatusNow()
                 if (!ok) {
                     _autoBackupStatus.value =
-                        "On - today's backup could not be written (check the export folder)."
+                        "On - today's backup could not be written - re-pick the export folder."
                 }
             } catch (e: Exception) {
                 // Auto backup is silent by contract: it never dialogs, never blocks startup.
