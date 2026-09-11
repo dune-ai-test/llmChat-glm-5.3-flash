@@ -124,6 +124,7 @@ private fun AsterNavigation(vm: AppViewModel) {
     val navigate by vm.navigate.collectAsStateWithLifecycle()
     val openChat by vm.openConversationId.collectAsStateWithLifecycle()
     val c = LocalScheme.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var crashDismissed by androidx.compose.runtime.saveable.rememberSaveable {
         androidx.compose.runtime.mutableStateOf(false)
     }
@@ -146,12 +147,19 @@ private fun AsterNavigation(vm: AppViewModel) {
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.clearCrashLog()
-                        crashDismissed = true
-                    }
-                ) { Text("Clear", color = c.danger) }
+                Row {
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(crash))
+                        }
+                    ) { Text("Copy", color = c.accent, fontWeight = FontWeight.SemiBold) }
+                    TextButton(
+                        onClick = {
+                            vm.clearCrashLog()
+                            crashDismissed = true
+                        }
+                    ) { Text("Clear", color = c.danger) }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { crashDismissed = true }) { Text("Dismiss", color = c.accent) }
@@ -259,6 +267,44 @@ private fun AsterNavigation(vm: AppViewModel) {
                 app = vm,
                 onBack = { nav.popBackStack() },
                 onOpenChat = { id -> vm.openConversation(id) }
+            )
+        }
+        composable("wizard/start") {
+            WizardIntro(
+                app = vm,
+                onBegin = { nav.navigate("wizard/provider") },
+                onBack = { nav.popBackStack() }
+            )
+        }
+        composable("wizard/provider") {
+            WizardProvider(
+                app = vm,
+                onContinue = { nav.navigate("wizard/config") },
+                onBack = { nav.popBackStack("wizard/start", false) }
+            )
+        }
+        composable("wizard/config") {
+            val configScope = rememberCoroutineScope()
+            WizardConfig(
+                app = vm,
+                onTest = { nav.navigate("wizard/test") },
+                onContinue = {
+                    configScope.launch {
+                        vm.wizardSaveAndFinish()
+                        nav.navigate("main") { popUpTo("main") { inclusive = true } }
+                    }
+                },
+                onBack = { nav.popBackStack() }
+            )
+        }
+        composable("wizard/test") {
+            WizardTest(
+                app = vm,
+                onDone = {
+                    nav.navigate("main") { popUpTo("main") { inclusive = true } }
+                },
+                onEditBack = { nav.popBackStack() },
+                onCancel = { nav.popBackStack() }
             )
         }
         composable("settings/chat") { ChatSettingsScreen(vm) { nav.popBackStack() } }
