@@ -911,7 +911,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val doc = resolver.query(
                     children,
                     arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
-                    "${android.provider.DocumentsContract.Document.DISPLAY_NAME} = ?",
+                    "${android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME} = ?",
                     arrayOf(old),
                     null
                 )?.use { c ->
