@@ -905,7 +905,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         while (files.size > 7) {
             val old = files.removeAt(0)
             runCatching {
-                val doc = android.provider.DocumentsContract.findDocument(resolver, tree, old)
+                val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+                    tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+                )
+                val doc = resolver.query(
+                    children,
+                    arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+                    "${android.provider.DocumentsContract.Document.DISPLAY_NAME} = ?",
+                    arrayOf(old),
+                    null
+                )?.use { c ->
+                    if (c.moveToFirst()) android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                        tree, c.getString(0)
+                    ) else null
+                }
                 if (doc != null) android.provider.DocumentsContract.deleteDocument(resolver, doc)
             }
         }
