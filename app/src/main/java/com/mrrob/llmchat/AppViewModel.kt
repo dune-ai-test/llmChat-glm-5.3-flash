@@ -650,7 +650,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Stores a persistable tree URI so exports never ask again - after probing it. */
     fun setExportFolder(uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
-            val usable = runCatching {
+            val outcome = runCatching {
                 runCatching {
                     appContext.contentResolver.takePersistableUriPermission(
                         uri,
@@ -659,20 +659,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 val probe = android.provider.DocumentsContract.createDocument(
-                    appContext.contentResolver, uri, "application/octet-stream", ".aster-probe.tmp"
+                    appContext.contentResolver, uri, "application/octet-stream", "aster-probe.tmp"
                 ) ?: throw IllegalStateException("folder rejects new files")
                 runCatching {
                     android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, probe)
                 }
                 true
-            }.getOrDefault(false)
-            if (usable) {
+            }
+            if (outcome.getOrDefault(false)) {
                 updateSettings { it.copy(exportFolderUri = uri.toString()) }
                 refreshAutoBackupStatus()
                 _dataOp.value = DataOp.Done("Export folder set - backups save there automatically.")
             } else {
                 _dataOp.value = DataOp.Done(
-                    "That folder can't store files (the Downloads view can't). " +
+                    "That folder can't store files (${outcome.exceptionOrNull()?.message ?: "unknown error"}). " +
                         "Pick a regular folder, e.g. Documents."
                 )
             }
