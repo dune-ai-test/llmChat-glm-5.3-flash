@@ -115,7 +115,10 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     ) { uri ->
         if (uri != null) {
             app.pendingImportUri = uri
-            app.importBackup(uri, "")
+            importReason =
+                "Enter the password you chose when exporting this backup. " +
+                    "Leave it blank if the backup has no password."
+            showImportPassword = true
         }
     }
 
@@ -373,9 +376,10 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
     importReason?.let { reason ->
         if (showImportPassword) {
             PasswordDialog(
-                title = "Backup is locked",
+                title = "Unlock backup",
                 reason = reason,
                 confirmLabel = "Unlock",
+                allowEmpty = true,
                 onDismiss = {
                     showImportPassword = false
                     importReason = null
@@ -446,6 +450,7 @@ private fun PasswordDialog(
     title: String,
     reason: String,
     confirmLabel: String,
+    allowEmpty: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
@@ -453,7 +458,7 @@ private fun PasswordDialog(
     val t = LocalType.current
     var pwd by remember { mutableStateOf("") }
     var pwd2 by remember { mutableStateOf("") }
-    val valid = pwd.length >= 4 && (confirmLabel != "Export" || pwd == pwd2)
+    val valid = (allowEmpty || pwd.length >= 4) && (confirmLabel != "Export" || pwd == pwd2)
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.card,
@@ -468,7 +473,7 @@ private fun PasswordDialog(
                         Text("Passwords do not match.", style = t.caption, color = c.danger)
                     }
                 }
-                if (pwd.isNotEmpty() && pwd.length < 4) {
+                if (!allowEmpty && pwd.isNotEmpty() && pwd.length < 4) {
                     Text("At least 4 characters.", style = t.caption, color = c.warning)
                 }
             }

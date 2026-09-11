@@ -736,7 +736,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             "This backup is password-protected - enter its password."
                         )
                     }
-                    com.mrrob.llmchat.data.Vault.decrypt(bytes, password)
+                    try {
+                        com.mrrob.llmchat.data.Vault.decrypt(bytes, password)
+                    } catch (ve: com.mrrob.llmchat.data.Vault.VaultException) {
+                        throw ve
+                    } catch (e: Exception) {
+                        // Any platform crypto failure must offer another password, never dead-end.
+                        throw com.mrrob.llmchat.data.Vault.VaultException(
+                            "The backup could not be unlocked - check the password. " +
+                                "(${e.message ?: e.javaClass.simpleName})"
+                        )
+                    }
                 } else {
                     String(bytes, Charsets.UTF_8)
                 }
