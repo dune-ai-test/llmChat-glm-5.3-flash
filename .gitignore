@@ -17,3 +17,6 @@ __pycache__/
 
 # release signing material (written by CI only)
 *.keystore
+
+# ZCode session artifacts
+.zcode/
