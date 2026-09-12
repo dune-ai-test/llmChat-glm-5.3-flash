@@ -135,9 +135,13 @@ fun ChatListRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = icon ?: if (conversation.voice) IconsL.mic else IconsL.chatSquare,
+                imageVector = icon ?: when {
+                    conversation.kind == "JUDGE" -> IconsL.scale
+                    conversation.voice -> IconsL.mic
+                    else -> IconsL.chatSquare
+                },
                 contentDescription = null,
-                tint = if (conversation.voice) c.accent else c.textSecondary,
+                tint = if (conversation.voice || conversation.kind == "JUDGE") c.accent else c.textSecondary,
                 modifier = Modifier.size(17.dp)
             )
         }

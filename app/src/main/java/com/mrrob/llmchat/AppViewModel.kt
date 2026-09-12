@@ -126,11 +126,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun selectTab(tab: AsterTab) { _tab.value = tab }
     fun goChat(conversationId: String) { _openConversationId.value = conversationId }
 
-    /** Open a conversation: voice chats continue in the Voice tab, text chats in Chat. */
+    /** Open a conversation: judge sessions continue in Judge Mode, voice chats in the Voice tab, text chats in Chat. */
     fun openConversation(id: String) {
         viewModelScope.launch {
             val conv = conversations.value.firstOrNull { it.id == id } ?: repo.conversation(id)
-            if (conv != null && conv.voice) {
+            if (conv != null && conv.kind == "JUDGE") {
+                _pendingJudge.value = id
+                _navigate.value = "judge"
+            } else if (conv != null && conv.voice) {
                 _tab.value = AsterTab.VOICE
                 _pendingVoice.value = id
             } else {
@@ -143,11 +146,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val pendingVoice: StateFlow<String?> = _pendingVoice.asStateFlow()
     fun consumePendingVoice() { _pendingVoice.value = null }
 
+    private val _pendingJudge = MutableStateFlow<String?>(null)
+    val pendingJudge: StateFlow<String?> = _pendingJudge.asStateFlow()
+    /** Returns the pending judge request once: null = none, "" = new session, else a conversation id to resume. */
+    fun consumePendingJudge(): String? {
+        val v = _pendingJudge.value
+        _pendingJudge.value = null
+        return v
+    }
+
     fun startNewChat() {
         viewModelScope.launch {
             val conv = repo.createConversation(kind = "TEXT")
             goChat(conv.id)
         }
+    }
+
+    /** Start a fresh judge-mode chat (the Home Judge Mode card). */
+    fun startJudgeChat() {
+        _pendingJudge.value = ""
+        _navigate.value = "judge"
     }
 
     /** Start a fresh voice session conversation. */
@@ -503,6 +521,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             repo.searchConversations(q.trim()).collect { list ->
                 _searchResults.value = when (filter) {
                     "voice" -> list.filter { it.voice }
+                    "judge" -> list.filter { it.kind == "JUDGE" }
                     "starred" -> list.filter { it.starred }
                     else -> list
                 }

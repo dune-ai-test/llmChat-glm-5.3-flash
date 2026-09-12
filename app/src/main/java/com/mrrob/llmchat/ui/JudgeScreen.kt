@@ -88,6 +88,15 @@ fun JudgeScreen(app: AppViewModel, vm: JudgeViewModel, onBack: () -> Unit) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
+    // A Home "Judge Mode" tap asks for a fresh session; a saved chat asks to resume.
+    LaunchedEffect(Unit) {
+        when (val pending = app.consumePendingJudge()) {
+            null -> {}
+            "" -> vm.newSession()
+            else -> vm.resume(pending)
+        }
+    }
+
     // Keep the newest turn in view while the panel is working.
     val busy = state.busy
     LaunchedEffect(state.turns.size, busy, state.turns.lastOrNull()?.answers?.count { it != null },

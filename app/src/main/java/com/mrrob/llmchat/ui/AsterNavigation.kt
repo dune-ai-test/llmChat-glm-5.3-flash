@@ -437,7 +437,7 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                             onOpenSettings = { vm.selectTab(AsterTab.SETTINGS) },
                             onOpenSearch = { nav.navigate("search") },
                             onVoice = { vm.selectTab(AsterTab.VOICE) },
-                            onJudge = { nav.navigate("judge") }
+                            onJudge = { vm.startJudgeChat() }
                         )
                         1 -> ChatsTab(
                             app = vm,

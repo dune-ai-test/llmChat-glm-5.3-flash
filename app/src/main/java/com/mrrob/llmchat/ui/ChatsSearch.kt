@@ -422,7 +422,7 @@ fun SearchScreen(
         Spacer(Modifier.height(14.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("all" to "All", "voice" to "Voice", "starred" to "Starred").forEach { (key, label) ->
+            listOf("all" to "All", "voice" to "Voice", "judge" to "Judge", "starred" to "Starred").forEach { (key, label) ->
                 com.mrrob.llmchat.ui.kit.AsterChip(
                     text = label,
                     selected = filter == key,
