@@ -10,11 +10,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mrrob.llmchat"
+        applicationId = "com.llmchat.asterjudge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.2.13"
+        versionCode = 1
+        versionName = "0.0.1"
     }
 
     signingConfigs {

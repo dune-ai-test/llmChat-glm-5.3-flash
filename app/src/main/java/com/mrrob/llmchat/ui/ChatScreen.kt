@@ -410,7 +410,7 @@ fun ChatScreen(
             value = input,
             onValueChange = { input = it },
             generating = generating,
-            placeholder = "Message Aster…",
+            placeholder = "Message Aster Judge…",
             enterToSend = settings.enterToSend,
             pendingImages = pendingImages,
             onRemoveImage = vm::removeImage,

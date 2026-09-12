@@ -58,7 +58,8 @@ fun HomeScreen(
     onSeeAll: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
-    onVoice: () -> Unit
+    onVoice: () -> Unit,
+    onJudge: () -> Unit
 ) {
     val connections by app.connections.collectAsStateWithLifecycle()
     val conversations by app.conversations.collectAsStateWithLifecycle()
@@ -214,6 +215,12 @@ fun HomeScreen(
                         Modifier.weight(1f)
                     ) { onVoice() }
                 }
+
+                // Judge Mode — one question, three models, one consensus
+                QuickAction(
+                    IconsL.scale, "Judge Mode", "3 models answer, review, converge",
+                    Modifier.fillMaxWidth()
+                ) { onJudge() }
 
                 // Recent
                 if (conversations.isNotEmpty()) {

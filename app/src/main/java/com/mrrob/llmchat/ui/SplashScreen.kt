@@ -67,7 +67,7 @@ fun SplashScreen(onFinished: () -> Unit) {
                 iconSize = 54.dp
             )
             Spacer(Modifier.height(18.dp))
-            Text("Aster", style = t.heroTitle.copy(fontSize = 34.sp, letterSpacing = (-0.5).sp), color = c.textPrimary)
+            Text("Aster Judge", style = t.heroTitle.copy(fontSize = 32.sp, letterSpacing = (-0.5).sp), color = c.textPrimary)
             Spacer(Modifier.height(4.dp))
             Text("Your AI workspace", style = t.desc.copy(fontSize = 15.sp), color = c.textSecondary)
         }

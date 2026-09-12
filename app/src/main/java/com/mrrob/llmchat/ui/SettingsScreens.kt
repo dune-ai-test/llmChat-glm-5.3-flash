@@ -367,7 +367,7 @@ fun SettingsScreen(app: AppViewModel, onNavigate: (String) -> Unit) {
             text = {
                 Text(
                     "Your conversations are sent to the API provider you configure. " +
-                        "Aster has no backend of its own - chats, settings and keys stay on this device. " +
+                        "Aster Judge has no backend of its own - chats, settings and keys stay on this device. " +
                         "API keys are stored encrypted; backups are additionally locked with your password.",
                     style = t.desc,
                     color = c.textSecondary

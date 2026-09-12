@@ -54,6 +54,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Scale
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Shuffle
@@ -147,4 +148,5 @@ object IconsL {
     val folder: ImageVector get() = Icons.Outlined.Folder
     val star: ImageVector get() = Icons.Outlined.StarBorder
     val starFilled: ImageVector get() = Icons.Filled.Star
+    val scale: ImageVector get() = Icons.Outlined.Scale
 }

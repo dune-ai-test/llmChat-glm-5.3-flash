@@ -85,7 +85,7 @@ fun OnboardingScreen(onGetStarted: () -> Unit, onSkip: () -> Unit) {
         ) { page ->
             when (page) {
                 0 -> OnboardPage(
-                    badge = "Welcome to Aster",
+                    badge = "Welcome to Aster Judge",
                     headline = "Every model you use, one quiet workspace.",
                     body = "Connect any OpenAI-compatible API and talk to your models with text or voice.",
                     props = listOf(

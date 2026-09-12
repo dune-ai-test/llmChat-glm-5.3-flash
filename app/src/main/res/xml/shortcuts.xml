@@ -7,7 +7,7 @@
         android:shortcutShortLabel="@string/sc_new_chat">
         <intent
             android:action="android.intent.action.MAIN"
-            android:targetPackage="com.mrrob.llmchat"
+            android:targetPackage="com.llmchat.asterjudge"
             android:targetClass="com.mrrob.llmchat.MainActivity">
             <extra android:name="aster_action" android:value="new_chat" />
         </intent>
@@ -19,7 +19,7 @@
         android:shortcutShortLabel="@string/sc_voice">
         <intent
             android:action="android.intent.action.MAIN"
-            android:targetPackage="com.mrrob.llmchat"
+            android:targetPackage="com.llmchat.asterjudge"
             android:targetClass="com.mrrob.llmchat.MainActivity">
             <extra android:name="aster_action" android:value="voice" />
         </intent>

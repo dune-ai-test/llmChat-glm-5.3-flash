@@ -64,6 +64,7 @@ import com.mrrob.llmchat.AppViewModel
 import com.mrrob.llmchat.AsterApp
 import com.mrrob.llmchat.AsterTab
 import com.mrrob.llmchat.ChatViewModel
+import com.mrrob.llmchat.JudgeViewModel
 import com.mrrob.llmchat.VoiceViewModel
 import com.mrrob.llmchat.ui.kit.IconsL
 import com.mrrob.llmchat.ui.theme.AsterTheme
@@ -225,6 +226,17 @@ private fun AsterNavigation(vm: AppViewModel) {
         }
         composable("main") {
             MainScaffold(vm, nav)
+        }
+        composable("judge") {
+            // Activity-scoped: leaving the screen must not cancel the deliberation.
+            val storeOwner = (LocalContext.current as? androidx.lifecycle.ViewModelStoreOwner)
+                ?: checkNotNull(LocalViewModelStoreOwner.current)
+            val judgeVm: JudgeViewModel = viewModel(
+                viewModelStoreOwner = storeOwner,
+                key = "judge",
+                factory = JudgeVmFactory(vm)
+            )
+            JudgeScreen(app = vm, vm = judgeVm, onBack = { nav.popBackStack() })
         }
         composable(
             route = "chat/{conversationId}",
@@ -424,7 +436,8 @@ private fun MainScaffold(vm: AppViewModel, nav: NavHostController) {
                             onSeeAll = { vm.selectTab(AsterTab.CHATS) },
                             onOpenSettings = { vm.selectTab(AsterTab.SETTINGS) },
                             onOpenSearch = { nav.navigate("search") },
-                            onVoice = { vm.selectTab(AsterTab.VOICE) }
+                            onVoice = { vm.selectTab(AsterTab.VOICE) },
+                            onJudge = { nav.navigate("judge") }
                         )
                         1 -> ChatsTab(
                             app = vm,
@@ -497,7 +510,7 @@ private fun AsterDrawer(
                     iconSize = 24.dp
                 )
                 Column {
-                    Text("Aster", style = t.cardTitle, color = c.textPrimary)
+                    Text("Aster Judge", style = t.cardTitle, color = c.textPrimary)
                     Text("Your AI workspace", style = t.tiny, color = c.textMuted)
                 }
             }
@@ -645,4 +658,10 @@ class VoiceVmFactory(private val app: AppViewModel) : ViewModelProvider.Factory 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         VoiceViewModel(app) as T
+}
+
+class JudgeVmFactory(private val app: AppViewModel) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        JudgeViewModel(app) as T
 }
