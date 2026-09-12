@@ -78,12 +78,12 @@ jobs:
             VER=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
             TAG="v$VER"
           fi
-          ASSET="Aster-$TAG-release-signed.apk"
+          ASSET="Aster-Judge-$TAG-release-signed.apk"
           cp app/build/outputs/apk/release/app-release.apk "$ASSET"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --target "$GITHUB_SHA" \
-              --title "Aster $TAG" \
+              --title "Aster Judge $TAG" \
               --notes "Signed release build - version $TAG (run $GITHUB_RUN_ID)."
           fi
           gh release upload "$TAG" "$ASSET" --clobber
